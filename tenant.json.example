@@ -1,0 +1,5 @@
+{
+  "tenant": "ndyg",
+  "broker": "https://auth.cross.stream",
+  "allowlist": ["<discord-user-id>"]
+}

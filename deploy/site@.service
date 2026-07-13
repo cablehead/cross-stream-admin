@@ -1,0 +1,18 @@
+[Unit]
+Description=customerenv site %i
+After=ce-boot-config.service
+[Service]
+ExecStart=/usr/local/bin/http-nu /run/sites/%i.sock --log-format jsonl serve.nu
+WorkingDirectory=/srv/sites/%i/repo
+EnvironmentFile=-/srv/sites/%i/env
+DynamicUser=yes
+Group=sites
+UMask=0007
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/srv/sites/%i /run/sites
+RuntimeDirectory=sites/%i-scratch
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target

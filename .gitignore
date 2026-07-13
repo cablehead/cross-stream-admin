@@ -1,0 +1,6 @@
+# Instance state — per-VM, never published. Materialized at provision/boot time.
+tenant.json          # {tenant, broker, allowlist} — the allowlist is this VM's gate
+broker-pub.jwk       # the broker's public verify key (fetch from <broker>/pubkey)
+auth/                # live sessions + CSRF challenges (runtime)
+*.key                # any key material (e.g. pai-sho identity)
+*.bak                # local backups

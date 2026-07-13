@@ -1,0 +1,10 @@
+[Unit]
+Description=customerenv admin app
+After=ce-boot-config.service
+[Service]
+Group=sites
+UMask=0007
+ExecStart=/usr/local/bin/http-nu /run/sites/admin.sock --log-format jsonl /srv/admin/serve.nu
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
