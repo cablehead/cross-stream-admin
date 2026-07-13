@@ -7,6 +7,9 @@ tenant.json
 # the broker's public verify key (fetch from <broker>/pubkey)
 broker-pub.jwk
 
+# the per-VM list of deployments (the app self-seeds it)
+registry.nuon
+
 # live sessions + CSRF challenges (runtime)
 auth/
 
