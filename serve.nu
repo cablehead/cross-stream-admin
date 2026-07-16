@@ -10,6 +10,11 @@ const STEP = "/usr/local/bin/step"
 const REGISTRY = "/srv/admin/registry.nuon" # [{repo, label}] — one label per deployment
 const SITES = "/srv/sites"                  # /srv/sites/<label>/{repo,env,state}
 
+def verify-token [token: string, cfg: record] {
+  let r = ($token | ^$STEP crypto jwt verify --key $BROKER_PUB --iss $cfg.broker --aud $cfg.tenant | complete)
+  if $r.exit_code == 0 { $r.stdout | from json | get payload } else { null }
+}
+
 def load-cfg [] { if ($CFG | path exists) { open --raw $CFG | from json } else { null } }
 
 def load-registry [] { if ($REGISTRY | path exists) { open $REGISTRY } else { [] } }
