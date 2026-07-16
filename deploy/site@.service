@@ -10,7 +10,6 @@ Group=sites
 UMask=0007
 NoNewPrivileges=yes
 ProtectSystem=strict
-ProtectHome=yes
 ReadWritePaths=/home/app/sites/%i /run/sites
 RuntimeDirectory=sites/%i-scratch
 Restart=on-failure
