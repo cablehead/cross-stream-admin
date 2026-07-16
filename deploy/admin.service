@@ -4,7 +4,7 @@ After=ce-boot-config.service
 [Service]
 Group=sites
 UMask=0007
-ExecStart=/usr/local/bin/http-nu /run/sites/admin.sock --log-format jsonl /srv/admin/serve.nu
+ExecStart=/usr/local/bin/http-nu /run/sites/admin.sock --log-format jsonl /home/app/admin/serve.nu
 Restart=on-failure
 [Install]
 WantedBy=multi-user.target

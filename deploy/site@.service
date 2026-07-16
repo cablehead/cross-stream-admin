@@ -3,15 +3,15 @@ Description=customerenv site %i
 After=ce-boot-config.service
 [Service]
 ExecStart=/usr/local/bin/http-nu /run/sites/%i.sock --log-format jsonl serve.nu
-WorkingDirectory=/srv/sites/%i/repo
-EnvironmentFile=-/srv/sites/%i/env
+WorkingDirectory=/home/app/sites/%i/repo
+EnvironmentFile=-/home/app/sites/%i/env
 DynamicUser=yes
 Group=sites
 UMask=0007
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/srv/sites/%i /run/sites
+ReadWritePaths=/home/app/sites/%i /run/sites
 RuntimeDirectory=sites/%i-scratch
 Restart=on-failure
 [Install]

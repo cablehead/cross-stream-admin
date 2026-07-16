@@ -1,14 +1,14 @@
 # admin.<tenant> — broker-verified login + site deploys. Holds NO OAuth secret: only the
 # broker's public key + an allowlist. Runs as root (see deploy/admin.service) so it can drive
 # git + systemctl; the sites it manages stay DynamicUser-sandboxed (see deploy/site@.service).
-use /srv/admin/oauth/lib.nu *
+use /home/app/admin/oauth/lib.nu *
 
-const CFG = "/srv/admin/tenant.json"        # {tenant, broker, allowlist}
-const BROKER_PUB = "/srv/admin/broker-pub.jwk"
-const AUTH_DIR = "/srv/admin/auth"
+const CFG = "/home/app/admin/tenant.json"        # {tenant, broker, allowlist}
+const BROKER_PUB = "/home/app/admin/broker-pub.jwk"
+const AUTH_DIR = "/home/app/admin/auth"
 const STEP = "/usr/local/bin/step"
-const REGISTRY = "/srv/admin/registry.nuon" # [{repo, label}] — one label per deployment
-const SITES = "/srv/sites"                  # /srv/sites/<label>/{repo,env,state}
+const REGISTRY = "/home/app/admin/registry.nuon" # [{repo, label}] — one label per deployment
+const SITES = "/home/app/sites"                  # /home/app/sites/<label>/{repo,env,state}
 
 def verify-token [token: string, cfg: record] {
   let r = ($token | ^$STEP crypto jwt verify --key $BROKER_PUB --iss $cfg.broker --aud $cfg.tenant | complete)
