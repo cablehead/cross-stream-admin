@@ -1,0 +1,44 @@
+/*
+ * admin.css, a thin layer over base.css (all ours; base is vendored, not a dependency).
+ * Raw tags carry the whole page. The only class is .shots, because a responsive image grid
+ * is the one thing no tag can express. Stellar tokens only.
+ *
+ * Radius: base uses one token, --border-radius-1, on every 4-sided box (buttons, inputs, pre,
+ * thumbnails). Dividers -- the nav rule, table row lines -- are borderless. A box gets the
+ * radius; a line gets none. No second radius anywhere.
+ */
+
+/* the page column: the raw <main> wrapper, centered at a reading width */
+main { max-width: 60rem; margin-inline: auto; padding: var(--size-1) var(--size-2) var(--size-3); }
+
+/* header: a raw <nav> flex row; the brand shoves everything after it to the right edge */
+nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--size--1) var(--size-1);
+  padding-block: var(--size-1);
+  margin-bottom: var(--size-2);
+  border-bottom: var(--border-width-1) solid var(--neutral-4);
+}
+nav > :first-child { margin-right: auto; }
+nav a { text-decoration: none; }
+
+/* forms are inline control rows */
+form { display: flex; flex-wrap: wrap; align-items: center; gap: var(--size--1); }
+
+/* controls are one family: same font, size, symmetric padding; base's --border-radius-1 */
+input, button, select { font-family: var(--font-mono); font-size: var(--font-size--1); padding: var(--size--1); }
+
+/* a copy button overlaid on a code block; the wrapping <figure> is the positioning context,
+   the icon swaps to a check for a beat on copy (.copied is a transient JS state, not a style) */
+figure { position: relative; }
+figure button[data-copy] { position: absolute; top: var(--size--1); right: var(--size--1); padding: var(--size--2); line-height: 0; background: var(--code-bg); }
+figure button[data-copy] svg:last-child { display: none; }
+figure button[data-copy].copied svg:first-child { display: none; }
+figure button[data-copy].copied svg:last-child { display: inline; }
+
+/* the one class: a responsive image grid (box radius matches everything else) */
+.shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--size-2); margin-block: var(--size-2); }
+.shots figure { margin: 0; }
+.shots img { width: 100%; height: auto; display: block; border: var(--border-width-1) solid var(--neutral-4); border-radius: var(--border-radius-1); }

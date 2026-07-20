@@ -1,7 +1,7 @@
-# Instance state — per-VM, never published. Materialized at provision/boot time.
-# (git .gitignore has no inline comments — keep patterns on their own lines.)
+# Instance state, per-VM, never published. Materialized at provision/boot time.
+# (git .gitignore has no inline comments, keep patterns on their own lines.)
 
-# {tenant, broker, allowlist} — the allowlist is this VM's gate
+# {tenant, broker, allowlist}, the allowlist is this VM's gate
 tenant.json
 
 # the broker's public verify key (fetch from <broker>/pubkey)
@@ -18,3 +18,6 @@ auth/
 
 # local backups
 *.bak
+
+# QA screenshots can embed a site push token, never publish
+screenshots/

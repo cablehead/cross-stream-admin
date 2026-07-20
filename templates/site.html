@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ label }}, customerenv admin{% endblock %}
+{% block body %}
+<p><small><a href="/">&larr; sites</a></small></p>
+<h1>{{ label }}</h1>
+<p><a href="https://{{ host }}/">{{ host }} &rarr;</a> &middot; {{ state }}</p>
+
+<h2>Push to deploy</h2>
+<p>From your project (it needs a <code>serve.nu</code> at its root), run:</p>
+<figure>
+  <button type=button data-copy title="Copy" aria-label="Copy to clipboard"><svg width=15 height=15 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=9 y=9 width=13 height=13 rx=2></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg width=15 height=15 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M20 6 9 17l-5-5"></path></svg></button>
+  {{ commands | safe }}
+</figure>
+<p><small>The token in that URL is this site's push credential, keep it private. Each push redeploys.</small></p>
+
+<h2>Features</h2>
+{% if store or services or datastar %}
+<ul>
+  {% if store %}<li><strong>store</strong>, the embedded event store (<code>.cat</code>, <code>.append</code>, &hellip;), reachable in your handler; its path is <code>$HTTP_NU.store</code>. Per-site; persists across redeploys and restarts; removed only if you delete the site.</li>{% endif %}
+  {% if services %}<li><strong>services</strong>, actors, services, and actions.</li>{% endif %}
+  {% if datastar %}<li><strong>datastar</strong>, the Datastar JS bundle is served at <code>$DATASTAR_JS_PATH</code>.</li>{% endif %}
+</ul>
+{% else %}
+<p><small>None enabled. Add a <code>cross-stream.nuon</code> at your repo root, e.g. <code>{ store: true }</code>, to turn on the embedded store, services, or datastar. Everything is off by default.</small></p>
+{% endif %}
+
+<form method=post action=/restart>
+  <input type=hidden name=label value="{{ label }}">
+  <button>restart</button>
+</form>
+{% endblock %}
