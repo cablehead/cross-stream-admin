@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}screenshots, customerenv admin{% endblock %}
+{% block body %}
+<h1>Screenshots</h1>
+<p><small>{{ count }} views, captured from the live admin with headless Chrome during UI QA.</small></p>
+<div class="shots">
+{{ grid | safe }}
+</div>
+{% endblock %}

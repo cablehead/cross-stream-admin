@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}customerenv admin{% endblock %}
+{% block body %}
+<h1>Sites</h1>
+<table>
+  <thead><tr><th>site</th><th>state</th><th></th></tr></thead>
+  <tbody>
+  {% for s in sites %}
+    <tr>
+      <td><a href="https://{{ s.host }}/">{{ s.label }}</a>{% if s.note %} <small>{{ s.note }}</small>{% endif %}</td>
+      <td>{{ s.state }}</td>
+      <td>{% if s.manage %}<a href="{{ s.manage }}">setup</a>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>New site</h2>
+<form method=post action=/create>
+  <input name=label pattern="[a-z0-9][a-z0-9-]*" placeholder="blog" aria-label="subdomain" required>
+  <small>.{{ tenant }}.cross.stream</small>
+  <button>create</button>
+</form>
+<p><small>The name becomes the subdomain. Creates an empty repo you <code>git push</code> to; it goes live once it has a <code>serve.nu</code> at its root.</small></p>
+{% endblock %}

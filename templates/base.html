@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width, initial-scale=1">
+<title>{% block title %}customerenv admin{% endblock %}</title>
+<link rel=stylesheet href="/assets/stellar.css">
+<link rel=stylesheet href="/assets/base.css">
+<link rel=stylesheet href="/assets/admin.css">
+<script>(function(){var s=localStorage.getItem("theme");var d=s?s==="dark":matchMedia("(prefers-color-scheme:dark)").matches;if(d)document.documentElement.classList.add("dark")})();</script>
+</head>
+<body>
+<main>
+<nav>
+  <a href="/"><strong>customerenv</strong> &middot; {{ tenant }}</a>
+  {% if user %}<a href="/screenshots">screenshots</a> <small>{{ user }}</small> <a href="/auth/logout">sign out</a>{% endif %}
+  <button type=button title="Toggle light / dark" aria-label="Toggle light / dark" onclick="var d=document.documentElement.classList.toggle('dark');localStorage.setItem('theme',d?'dark':'light')">&#9680;</button>
+</nav>
+{% block body %}{% endblock %}
+</main>
+<script>
+document.addEventListener("click",function(e){
+  var b=e.target.closest("[data-copy]"); if(!b)return;
+  var pre=b.closest("figure").querySelector("pre"); if(!pre)return;
+  navigator.clipboard.writeText(pre.innerText.trim());
+  b.classList.add("copied"); setTimeout(function(){b.classList.remove("copied")},1200);
+});
+</script>
+</body>
+</html>

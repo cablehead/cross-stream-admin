@@ -2,7 +2,7 @@
 Description=customerenv site %i
 After=ce-boot-config.service
 [Service]
-ExecStart=/usr/local/bin/http-nu /run/sites/%i.sock --log-format jsonl serve.nu
+ExecStart=/usr/local/bin/http-nu /run/sites/%i.sock --log-format jsonl $HTTPNU_FLAGS serve.nu
 WorkingDirectory=/home/app/sites/%i/repo
 EnvironmentFile=-/home/app/sites/%i/env
 DynamicUser=yes

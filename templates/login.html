@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}admin, sign in{% endblock %}
+{% block body %}
+<h1>customerenv admin</h1>
+<p>Sign in to manage your sites.</p>
+<p><a href="/auth/login">Sign in with Discord &rarr;</a></p>
+{% if reason %}<p><small>{{ reason }}</small></p>{% endif %}
+{% endblock %}
