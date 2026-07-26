@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# post-receive hook (installed into each bare repo at /home/app/git/<label>.git/hooks/).
+# On push: check the pushed branch out into the site's work-tree and (re)start its unit.
+# Runs as the app user (git-http-backend's user); uses passwordless sudo for the bits that
+# touch root-owned /home/app/sites and systemd.
+set -euo pipefail
+
+GIT_DIR_ABS=$(git rev-parse --absolute-git-dir)
+LABEL=$(basename "$GIT_DIR_ABS" .git)
+WORKTREE=/home/app/sites/$LABEL/repo
+
+# Pick the branch that was pushed (last refs/heads/* on stdin).
+branch=""
+while read -r _old newrev refname; do
+  case "$refname" in
+    refs/heads/*)
+      # a delete (newrev all-zero) shouldn't trigger a deploy
+      [ "$newrev" = "0000000000000000000000000000000000000000" ] || branch=${refname#refs/heads/}
+      ;;
+  esac
+done
+[ -n "$branch" ] || { echo "post-receive: no branch pushed, skipping deploy"; exit 0; }
+
+echo "post-receive: deploying '$LABEL' from branch '$branch'"
+
+# Make the bare repo's default branch track what was pushed (so clones get the right HEAD).
+git --git-dir="$GIT_DIR_ABS" symbolic-ref HEAD "refs/heads/$branch" || true
+
+# Materialise the pushed tree into the site work-tree. We use `git archive | tar` rather
+# than `git --work-tree checkout` so that all git reads happen as the app user against the
+# bare repo, nothing runs git as root inside the repo, which would leave root-owned
+# reflog/index files and break the *next* push. Only tar (writing to the root-owned site
+# area) needs sudo. We wipe the tree first so deleted files don't linger across deploys.
+sudo rm -rf "$WORKTREE"
+sudo mkdir -p "$WORKTREE"
+git --git-dir="$GIT_DIR_ABS" archive "$branch" | sudo tar -x -C "$WORKTREE" -f -
+# Scoped to the work-tree on purpose: it's what the push just rebuilt, and the only thing
+# whose modes should be normalised here. The persistent dirs below manage their own.
+sudo chmod -R a+rX "$WORKTREE"
+
+if [ ! -f "$WORKTREE/serve.nu" ]; then
+  echo "post-receive: WARNING no serve.nu at repo root, site@$LABEL will fail to start"
+fi
+
+# --- opt-in http-nu features from the repo manifest (cross-stream.nuon) --------
+# A repo declares INTENT as booleans; everything is off by default. We read only
+# the known booleans and build the flag string ourselves (paths are ours), so a
+# pushed repo can never inject raw args like --expose / --tls / -c / --plugin.
+# `open` on a .nuon file is data deserialization, not evaluation, so it's safe.
+MANIFEST="$WORKTREE/cross-stream.nuon"
+STORE_DIR="/home/app/sites/$LABEL/store"
+STATE_DIR="/home/app/sites/$LABEL/state"
+flags=""
+if [ -f "$MANIFEST" ]; then
+  # single-quoted nu script (bash expands nothing); paths come in via $env, so nu's own
+  # variables never collide with the shell.
+  flags=$(MANIFEST="$MANIFEST" STORE_DIR="$STORE_DIR" /usr/local/bin/nu -n -c '
+    let m = (try { open ($env.MANIFEST) } catch { {} })
+    let services = (($m | get -o services | default false) == true)
+    let store = ((($m | get -o store | default false) == true) or $services)
+    mut f = []
+    if $store { $f = ($f | append $"--store ($env.STORE_DIR)") }
+    if $services { $f = ($f | append "--services") }
+    if (($m | get -o datastar | default false) == true) { $f = ($f | append "--datastar") }
+    $f | str join " "
+  ' 2>/dev/null || true)
+fi
+
+# The store must survive redeploys (we only wipe repo/) and be writable by the
+# site's group: root-owned, group `sites`, setgid so frames inherit the group.
+if [[ "$flags" == *"--store"* ]]; then
+  sudo install -d -m 2770 -g sites "$STORE_DIR"
+fi
+
+# state/ is the same deal but unconditional: every site gets one writable, redeploy-surviving
+# directory, with no manifest opt-in and no coupling to the event store. It's the only place a
+# site can put a SQLite file, a cache, uploads, anything it writes itself. We have to create it
+# here, because the sandboxed site cannot make one for itself.
+sudo install -d -m 2770 -g sites "$STATE_DIR"
+
+# Hand the flags to systemd via the unit's EnvironmentFile (empty = no flags). SITE_STATE
+# lands in the site's environment too, so a handler reaches its state dir as $env.SITE_STATE
+# rather than hard-coding a path that embeds its own label.
+{ printf 'HTTPNU_FLAGS=%s\n' "$flags"; printf 'SITE_STATE=%s\n' "$STATE_DIR"; } \
+  | sudo tee "/home/app/sites/$LABEL/env" >/dev/null
+echo "post-receive: http-nu flags for $LABEL: ${flags:-<none>}"
+
+sudo systemctl restart "site@$LABEL"
+echo "post-receive: restarted site@$LABEL -> https://$LABEL.<tenant>.cross.stream/"

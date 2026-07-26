@@ -1,0 +1,17 @@
+[Unit]
+Description=customerenv git host (reserved 'git' label), smart-HTTP push-to-deploy gateway
+After=ce-boot-config.service
+[Service]
+# Runs as the app user (NOT a DynamicUser): it owns the bare repos under /home/app/git and
+# needs app's passwordless sudo so the per-repo post-receive hook can checkout into the
+# root-owned /home/app/sites and restart site@<label>. SupplementaryGroups=sites lets it
+# create /run/sites/git.sock; the dir is setgid sites, so the socket lands as app:sites and
+# the caddy dispatcher (in group sites) can reverse_proxy to it.
+User=app
+SupplementaryGroups=sites
+UMask=0007
+WorkingDirectory=/home/app/git-host
+ExecStart=/usr/local/bin/http-nu /run/sites/git.sock --log-format jsonl /home/app/git-host/serve.nu
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target

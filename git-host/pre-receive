@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# pre-receive hook (installed into each bare repo at /home/app/git/<label>.git/hooks/).
+# Validate cross-stream.nuon in the *incoming* tree and reject the push loudly if it's
+# garbled, a typo like `{ stor: true }` must fail, not silently deploy with the store off.
+# Runs before any ref moves, so a rejection leaves the deployed site untouched.
+set -euo pipefail
+
+reject() { echo "cross-stream.nuon rejected: $1" >&2; exit 1; }
+
+while read -r _old newrev refname; do
+  case "$refname" in refs/heads/*) ;; *) continue ;; esac
+  [ "$newrev" = "0000000000000000000000000000000000000000" ] && continue  # branch delete
+  git cat-file -e "$newrev:cross-stream.nuon" 2>/dev/null || continue     # no manifest -> fine
+
+  content=$(git cat-file -p "$newrev:cross-stream.nuon")
+  # Validate as data (a record of known boolean keys); the logic lives in a .nu file so
+  # there's no bash/nu quoting to get wrong.
+  err=$(CONTENT="$content" /usr/local/bin/nu -n /home/app/git-host/validate-manifest.nu 2>&1) || reject "$err"
+done

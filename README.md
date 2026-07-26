@@ -18,7 +18,7 @@ git-push path it offers tenants.
   `/home/app/git/<label>.git` with the deploy hooks, and hands back the exact `git remote add`
   and `git push` lines.
 - **Push to deploy.** The tenant pushes to `git.<tenant>.cross.stream/<label>.git`. The
-  [git-host](https://github.com/cablehead/cross-stream-git-host) gateway checks the tree out
+  [git-host](git-host/) gateway checks the tree out
   into `/home/app/sites/<label>/repo` and restarts `site@<label>`. Each push redeploys.
 - **Per-site page** (`/s/<label>`). Shows the push commands, the unit state, a restart button,
   and which http-nu features the site opted into (see the site contract).
@@ -31,6 +31,7 @@ systemd instance, and the site directory.
 ```
 serve.nu               # the app (an http-nu handler)
 templates/             # minijinja pages (base, login, dashboard, site, docs, screenshots)
+git-host/              # the push gateway + deploy hooks (own unit, runs as app)
 docs/site-guide.md     # the tenant-facing guide, rendered at /docs via `.md`
 assets/                # Stellar tokens (stellar.css) + base.css + admin.css + fonts
 oauth/                 # shared OAuth lib (challenge/CSRF, providers). Dormant here: the
