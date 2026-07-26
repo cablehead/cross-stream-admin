@@ -33,6 +33,27 @@ Each bare repo carries two hooks, installed by cross-stream-admin's "create site
   files and break the next push), translates the manifest into http-nu flags written to the
   site's `env`, ensures `state/` exists, then runs `systemctl restart site@<label>`.
 
+### Sharing the hooks instead of copying them
+
+`create site` copies the hooks into each bare repo, so every repo holds a snapshot from the
+moment it was created and a hook change never reaches sites that already exist. `core.hooksPath`
+fixes that: point each bare repo at this directory and one canonical copy serves them all.
+Verified on git 2.43: editing the canonical hook takes effect on the next push, no reinstall.
+
+```nushell
+# replaces the two `install -m 0755 ...` lines in the admin's do-create
+^git --git-dir $bare config core.hooksPath $HOOKS_DIR
+```
+
+**Ordering matters.** The hooks are committed executable here, but the copies currently baked
+into the layer are `0644`; `install -m 0755` is what makes them executable on the way in. So the
+switch is only safe *after* a layer rebuild that ships them from this repo. Doing it sooner
+breaks every push on existing tenants, because `core.hooksPath` makes git ignore
+`$GIT_DIR/hooks` entirely and the canonical files would not be executable.
+
+Existing bare repos also need `core.hooksPath` set once each; until then they keep using their
+stale copy, which can then be deleted.
+
 ## The site contract
 
 A pushed repo needs a `serve.nu` at its root, an http-nu handler. It may also carry a

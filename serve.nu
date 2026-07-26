@@ -17,7 +17,10 @@ const REGISTRY = "/home/app/admin/registry.nuon"
 const SITES = "/home/app/sites"
 const GIT_ROOT = "/home/app/git"
 const TOKENS = "/home/app/git/tokens.json"
-const HOOK_SRC = "/home/app/git-host/post-receive"
+# Canonical location of the deploy hooks. Single point of truth: when the layer moves the
+# checkout, this is the only line that changes. Also the dir `core.hooksPath` will point at
+# once the layer ships the hooks executable (see git-host/README.md).
+const HOOKS_DIR = "/home/app/git-host"
 const ASSETS = "/home/app/admin/assets"
 const TPL = "/home/app/admin/templates"
 const SHOTS = "/home/app/admin/screenshots"
@@ -188,8 +191,8 @@ def do-create [label: string, reg: list, tenant: string] {
     } else {
       ^git -C $bare config http.receivepack true
       ^git -C $bare config http.uploadpack true
-      ^install -m 0755 /home/app/git-host/pre-receive $"($bare)/hooks/pre-receive"
-      ^install -m 0755 /home/app/git-host/post-receive $"($bare)/hooks/post-receive"
+      ^install -m 0755 $"($HOOKS_DIR)/pre-receive" $"($bare)/hooks/pre-receive"
+      ^install -m 0755 $"($HOOKS_DIR)/post-receive" $"($bare)/hooks/post-receive"
       ^chown -R app:app $bare
       save-tokens (load-tokens | insert $token $label)
       $reg | append {label: $label, created: (date now | format date "%Y-%m-%d")} | save --force $REGISTRY
