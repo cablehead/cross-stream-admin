@@ -23,6 +23,25 @@
 {% else %}
 <p><small>None enabled. Add a <code>cross-stream.nuon</code> at your repo root, e.g. <code>{ store: true }</code>, to turn on the embedded store, services, or datastar. Everything is off by default.</small></p>
 {% endif %}
+<p><small>The manifest is a record of booleans, and the three keys above are the only ones accepted: <code>store</code>, <code>services</code> (implies <code>store</code>), <code>datastar</code>. An unknown key or malformed nuon is rejected at push time, with the reason printed in your <code>git push</code> output. You declare intent, not raw flags.</small></p>
+
+<h2>Files</h2>
+<p>Your handler runs from <code>repo/</code>, sandboxed. Two rules cover nearly everything:</p>
+<ul>
+  <li><strong><code>repo/</code> is disposable.</strong> Every push deletes it and re-extracts it from the pushed commit. Anything not in the commit is gone, and <code>.gitignore</code> does not protect it. Never write data you want to keep next to your code.</li>
+  <li><strong><code>state/</code> is yours.</strong> Always present, writable, and untouched by deploys. Its path is <code>$env.SITE_STATE</code>. Put your SQLite file, caches, and uploads here. Removed only if you delete the site.</li>
+</ul>
+<p><small>Everything else is read-only. The site directory itself is not writable, so <code>state/</code> (and <code>store/</code>, if you enabled it) are the only durable places to write. <code>/tmp</code> works for scratch but is shared with the rest of the VM and does not survive a reboot.</small></p>
+<p><small>SQLite works, including WAL mode, as long as the database lives directly in <code>$env.SITE_STATE</code> so its <code>-wal</code> and <code>-shm</code> siblings can be created beside it. Your site runs under a transient system user, so do not depend on file ownership, only on the directories above.</small></p>
+
+<h2>Platform</h2>
+<p>Useful if you want to commit a static binary to your repo and call it from your handler. That is the supported way to get a tool the VM does not ship, and the binary must be built for:</p>
+<ul>
+  <li><strong>Ubuntu 24.04 LTS</strong>, <strong>x86_64</strong>, glibc 2.39 (kernel 6.12)</li>
+  <li>Rust target <code>x86_64-unknown-linux-gnu</code>, or <code>x86_64-unknown-linux-musl</code> for a fully static build, which is the safer choice</li>
+  <li>Go: <code>GOOS=linux GOARCH=amd64 CGO_ENABLED=0</code></li>
+</ul>
+<p><small>Commit it executable (<code>git update-index --chmod=+x</code> if needed); the deploy preserves the mode. You cannot install packages into the VM. Already on <code>PATH</code>: <code>nu</code> {{ nu_version }}, <code>http-nu</code> {{ http_nu_version }}, <code>step</code> (keys, JWT/JWE, and other crypto beyond nushell's <code>hash</code> builtins), <code>caddy</code>, <code>git</code>, <code>bat</code>.</small></p>
 
 <form method=post action=/restart>
   <input type=hidden name=label value="{{ label }}">

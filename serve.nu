@@ -131,6 +131,12 @@ def site-flags [label: string] {
   { store: ($s | str contains "--store"), services: ($s | str contains "--services"), datastar: ($s | str contains "--datastar") }
 }
 
+# Toolchain versions quoted on the site page, so the build-target advice there can't drift from
+# what's actually installed. Best-effort: a blank version just renders as a bare tool name.
+def tool-version [bin: string] {
+  try { ^$bin --version | lines | first | str replace --regex '^[a-z-]+ ' '' | str trim } catch { "" }
+}
+
 # A site's own page: push commands + restart. Also the create-landing (create redirects here).
 def site-page [label: string, user: string, cfg: record] {
   let token = (token-for $label)
@@ -143,6 +149,8 @@ def site-page [label: string, user: string, cfg: record] {
       host: $"($label).($cfg.tenant).cross.stream"
       state: (unit-state $"site@($label)")
       commands: (push-commands $remote)
+      nu_version: (tool-version "nu")
+      http_nu_version: (tool-version "http-nu")
     } | merge (site-flags $label) | .mj $"($TPL)/site.html"
   }
 }

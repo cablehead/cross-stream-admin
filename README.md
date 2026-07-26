@@ -46,8 +46,34 @@ A tenant repo must have a `serve.nu` at its root, an
 [http-nu](https://github.com/cablehead/http-nu) handler. It runs as `site@<label>` on
 `/run/sites/<label>.sock`, and the guest caddy dispatcher routes
 `<label>.<tenant>.cross.stream` to that socket by subdomain (one dynamic rule, no per-site
-config). Per-site `env` and a redeploy-surviving `store/` live beside `repo/` under
+config). Per-site `env`, a `state/` dir, and a `store/` dir live beside `repo/` under
 `/home/app/sites/<label>/`.
+
+### Filesystem
+
+The site is sandboxed (`DynamicUser`, `ProtectSystem=strict`), so only two paths under
+`/home/app/sites/<label>/` are writable, and the site dir itself is not one of them:
+
+| path | lifetime | notes |
+|------|----------|-------|
+| `repo/` | **wiped every push** | the checked-out tree. `.gitignore` does not make a file survive; the hook `rm -rf`s it and re-extracts from the commit |
+| `state/` | survives redeploys | always created, `$env.SITE_STATE`. The general-purpose writable dir: SQLite, caches, uploads |
+| `store/` | survives redeploys | only when the manifest opts in; http-nu's event store, `$HTTP_NU.store` |
+
+`state/` and `store/` are root-owned, group `sites`, mode `2770`, so the setgid bit keeps new
+files group-accessible across the transient UIDs `DynamicUser` hands out. Sites should key off
+the directories, never off file ownership. `/tmp` is writable but shared VM-wide and not
+persistent. SQLite in WAL mode works in `state/`, since the `-wal` and `-shm` files are created
+next to the database.
+
+### Platform
+
+Sites cannot install packages. To use a tool the VM does not ship, commit a static binary
+(executable bit preserved by the deploy) built for **Ubuntu 24.04 LTS / x86_64 / glibc 2.39**:
+Rust `x86_64-unknown-linux-musl` (fully static, safest) or `x86_64-unknown-linux-gnu`; Go
+`GOOS=linux GOARCH=amd64 CGO_ENABLED=0`. Already on `PATH`: `nu`, `http-nu`, `git`, `caddy`,
+`bat`, and `step` (key generation, JWT/JWE, and crypto past nushell's `hash` builtins). The
+site page renders the live `nu` and `http-nu` versions so this advice cannot drift.
 
 A repo may also carry a `cross-stream.nuon` manifest to opt into http-nu features. Everything is
 off by default:
@@ -57,9 +83,10 @@ off by default:
 ```
 
 `store` enables the embedded event store, `services` enables actors/services/actions (and
-implies `store`), and `datastar` serves the Datastar bundle. The git-host hook whitelists these
-keys and builds the flags, so a repo declares intent, not raw args. A garbled manifest is
-rejected at push time.
+implies `store`), and `datastar` serves the Datastar bundle. Those three booleans are the whole
+vocabulary. The git-host hook whitelists these keys and builds the flags itself, so a repo
+declares intent and can never inject raw args like `--expose` or `--tls`. An unknown key or
+malformed nuon is rejected at push time, with the reason printed in the `git push` output.
 
 ## Instance state (never committed, `.gitignore`d)
 
