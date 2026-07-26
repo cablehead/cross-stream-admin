@@ -21,6 +21,7 @@ const HOOK_SRC = "/home/app/git-host/post-receive"
 const ASSETS = "/home/app/admin/assets"
 const TPL = "/home/app/admin/templates"
 const SHOTS = "/home/app/admin/screenshots"
+const DOCS = "/home/app/admin/docs"
 use /home/app/admin/oauth/lib.nu *
 
 def verify-token [token: string, cfg: record] {
@@ -131,12 +132,6 @@ def site-flags [label: string] {
   { store: ($s | str contains "--store"), services: ($s | str contains "--services"), datastar: ($s | str contains "--datastar") }
 }
 
-# Toolchain versions quoted on the site page, so the build-target advice there can't drift from
-# what's actually installed. Best-effort: a blank version just renders as a bare tool name.
-def tool-version [bin: string] {
-  try { ^$bin --version | lines | first | str replace --regex '^[a-z-]+ ' '' | str trim } catch { "" }
-}
-
 # A site's own page: push commands + restart. Also the create-landing (create redirects here).
 def site-page [label: string, user: string, cfg: record] {
   let token = (token-for $label)
@@ -149,9 +144,21 @@ def site-page [label: string, user: string, cfg: record] {
       host: $"($label).($cfg.tenant).cross.stream"
       state: (unit-state $"site@($label)")
       commands: (push-commands $remote)
-      nu_version: (tool-version "nu")
-      http_nu_version: (tool-version "http-nu")
     } | merge (site-flags $label) | .mj $"($TPL)/site.html"
+  }
+}
+
+# The tenant-facing guide, rendered straight from docs/site-guide.md through `.md`. The markdown
+# is the single source: the site page links here rather than restating it, so there's one copy to
+# keep true.
+def docs-page [user: string, cfg: record] {
+  let src = $"($DOCS)/site-guide.md"
+  if not ($src | path exists) {
+    resp "guide not found" 404 {}
+  } else {
+    # `decode utf-8` is load-bearing: `open --raw` hands back a byte stream and plain `open`
+    # parses .md into a table, and `.md` accepts neither, only a string.
+    {tenant: $cfg.tenant, user: $user, body: (open --raw $src | decode utf-8 | .md | get __html)} | .mj $"($TPL)/docs.html"
   }
 }
 
@@ -235,6 +242,7 @@ def do-restart [label: string] {
               resp "" 302 {Location: "/", "Set-Cookie": [$"session=($hash); Path=/; HttpOnly; Secure; SameSite=Lax" "authnonce=; Path=/; Max-Age=0"]}
             }
           }
+          "/docs" => { docs-page (who-of $sess) $cfg }
           "/auth/logout" => {
             let hash = (cookie $req "session")
             if ($hash | is-not-empty) { do $ss.delete $hash }

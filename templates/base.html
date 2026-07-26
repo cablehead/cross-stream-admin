@@ -13,6 +13,7 @@
 <main>
 <nav>
   <a href="/"><strong>customerenv</strong> &middot; {{ tenant }}</a>
+  <a href="/docs">guide</a>
   {% if user %}<a href="/screenshots">screenshots</a> <small>{{ user }}</small> <a href="/auth/logout">sign out</a>{% endif %}
   <button type=button title="Toggle light / dark" aria-label="Toggle light / dark" onclick="var d=document.documentElement.classList.toggle('dark');localStorage.setItem('theme',d?'dark':'light')">&#9680;</button>
 </nav>

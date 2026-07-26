@@ -30,7 +30,8 @@ systemd instance, and the site directory.
 
 ```
 serve.nu               # the app (an http-nu handler)
-templates/             # minijinja pages (base, login, dashboard, site, screenshots)
+templates/             # minijinja pages (base, login, dashboard, site, docs, screenshots)
+docs/site-guide.md     # the tenant-facing guide, rendered at /docs via `.md`
 assets/                # Stellar tokens (stellar.css) + base.css + admin.css + fonts
 oauth/                 # shared OAuth lib (challenge/CSRF, providers). Dormant here: the
                        #   tenant verifies broker tokens, it does not talk to Discord itself
@@ -49,31 +50,13 @@ A tenant repo must have a `serve.nu` at its root, an
 config). Per-site `env`, a `state/` dir, and a `store/` dir live beside `repo/` under
 `/home/app/sites/<label>/`.
 
-### Filesystem
+### Filesystem and platform
 
-The site is sandboxed (`DynamicUser`, `ProtectSystem=strict`), so only two paths under
-`/home/app/sites/<label>/` are writable, and the site dir itself is not one of them:
-
-| path | lifetime | notes |
-|------|----------|-------|
-| `repo/` | **wiped every push** | the checked-out tree. `.gitignore` does not make a file survive; the hook `rm -rf`s it and re-extracts from the commit |
-| `state/` | survives redeploys | always created, `$env.SITE_STATE`. The general-purpose writable dir: SQLite, caches, uploads |
-| `store/` | survives redeploys | only when the manifest opts in; http-nu's event store, `$HTTP_NU.store` |
-
-`state/` and `store/` are root-owned, group `sites`, mode `2770`, so the setgid bit keeps new
-files group-accessible across the transient UIDs `DynamicUser` hands out. Sites should key off
-the directories, never off file ownership. `/tmp` is writable but shared VM-wide and not
-persistent. SQLite in WAL mode works in `state/`, since the `-wal` and `-shm` files are created
-next to the database.
-
-### Platform
-
-Sites cannot install packages. To use a tool the VM does not ship, commit a static binary
-(executable bit preserved by the deploy) built for **Ubuntu 24.04 LTS / x86_64 / glibc 2.39**:
-Rust `x86_64-unknown-linux-musl` (fully static, safest) or `x86_64-unknown-linux-gnu`; Go
-`GOOS=linux GOARCH=amd64 CGO_ENABLED=0`. Already on `PATH`: `nu`, `http-nu`, `git`, `caddy`,
-`bat`, and `step` (key generation, JWT/JWE, and crypto past nushell's `hash` builtins). The
-site page renders the live `nu` and `http-nu` versions so this advice cannot drift.
+Tenant-facing detail lives in [`docs/site-guide.md`](docs/site-guide.md), which the admin renders
+at `/docs` through http-nu's `.md`. That file is the single source; don't restate it here or in
+the templates. In short: the repo directory is rebuilt on every push, `$env.SITE_STATE` persists
+and is where a SQLite file belongs, and a tool we don't ship should be committed as a static
+binary built for the guide's stated target.
 
 A repo may also carry a `cross-stream.nuon` manifest to opt into http-nu features. Everything is
 off by default:
