@@ -31,7 +31,7 @@ Each bare repo carries two hooks, installed by cross-stream-admin's "create site
 - `post-receive` materializes the pushed tree into `/home/app/sites/<label>/repo` with
   `git archive | tar` (not `git checkout` as root, which would leave root-owned reflog and index
   files and break the next push), translates the manifest into http-nu flags written to the
-  site's `env`, ensures `state/` exists, then runs `systemctl restart site@<label>`.
+  site's `env`, ensures `state/` exists, then runs `systemctl enable` + `systemctl restart site@<label>` (enable so it survives a reboot).
 
 ### Sharing the hooks instead of copying them
 
@@ -74,7 +74,7 @@ Only `repo/` is rebuilt on each push (`rm -rf` then re-extract), so nothing a si
 survives a deploy, `.gitignore` or not. Two sibling dirs persist, both created by the hook with
 ownership the sandboxed site can write through:
 
-- `state/`, created unconditionally, handed to the site as `$env.SITE_STATE`. The general-purpose
+- `state/`, created unconditionally, handed to the site as `$env.CROSS_STREAM_SITE_STATE`. The general-purpose
   writable dir. The hook has to create it, since a site cannot make one for itself.
 - `store/`, created only when the manifest opts in. http-nu's event store.
 
@@ -103,5 +103,5 @@ http://git.<tenant>.cross.stream:80 { reverse_proxy unix//run/sites/git.sock }
 ```
 
 Requires `git-http-backend` (git package), `nu`, and `http-nu` in the base image, plus
-passwordless sudo for `app` (the hooks run `systemctl restart site@*` and write under
+passwordless sudo for `app` (the hooks run `systemctl enable`+`restart site@*` and write under
 `/home/app/sites/`). `tokens.json` and the bare repos are per-VM runtime state, not baked.

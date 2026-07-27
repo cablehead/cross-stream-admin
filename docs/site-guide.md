@@ -39,12 +39,12 @@ Your handler runs from the checked-out tree, sandboxed. Two rules cover nearly e
   only keeps it out of the commit, which is precisely what gets it deleted. Never keep data you
   care about next to your code.
 - **`state/` is yours.** Always there, writable, untouched by deploys. Its path is
-  `$env.SITE_STATE`.
+  `$env.CROSS_STREAM_SITE_STATE`.
 
 | path | lifetime |
 |------|----------|
 | repo | rebuilt on every push |
-| `$env.SITE_STATE` | persists across pushes and restarts; removed only when the site is deleted |
+| `$env.CROSS_STREAM_SITE_STATE` | persists across pushes and restarts; removed only when the site is deleted |
 | `$HTTP_NU.store` | same, when `store` is enabled |
 
 Everything else is read-only, so `state/` (and the store, if enabled) are the only durable places
@@ -54,11 +54,11 @@ file ownership.
 
 ### SQLite
 
-Works, including WAL mode. Keep the database directly in `$env.SITE_STATE` so its `-wal` and
+Works, including WAL mode. Keep the database directly in `$env.CROSS_STREAM_SITE_STATE` so its `-wal` and
 `-shm` siblings can be created beside it:
 
 ```nushell
-let db = ($env.SITE_STATE | path join "app.db")
+let db = ($env.CROSS_STREAM_SITE_STATE | path join "app.db")
 ```
 
 Do not put it in the repo and `.gitignore` it. That is the one arrangement guaranteed to lose

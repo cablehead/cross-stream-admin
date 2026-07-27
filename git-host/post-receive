@@ -78,12 +78,18 @@ fi
 # here, because the sandboxed site cannot make one for itself.
 sudo install -d -m 2770 -g sites "$STATE_DIR"
 
-# Hand the flags to systemd via the unit's EnvironmentFile (empty = no flags). SITE_STATE
-# lands in the site's environment too, so a handler reaches its state dir as $env.SITE_STATE
-# rather than hard-coding a path that embeds its own label.
-{ printf 'HTTPNU_FLAGS=%s\n' "$flags"; printf 'SITE_STATE=%s\n' "$STATE_DIR"; } \
+# Hand the flags to systemd via the unit's EnvironmentFile (empty = no flags).
+# CROSS_STREAM_SITE_STATE lands in the site's environment too, so a handler reaches its
+# state dir as $env.CROSS_STREAM_SITE_STATE rather than hard-coding a path that embeds its
+# own label. (Prefixed to namespace the site contract's env under CROSS_STREAM_.)
+{ printf 'HTTPNU_FLAGS=%s\n' "$flags"; printf 'CROSS_STREAM_SITE_STATE=%s\n' "$STATE_DIR"; } \
   | sudo tee "/home/app/sites/$LABEL/env" >/dev/null
 echo "post-receive: http-nu flags for $LABEL: ${flags:-<none>}"
 
+# enable, not just restart: a pushed site must survive a reboot. restart alone leaves the
+# unit running but not wanted-by multi-user.target, so the next VM reboot drops it (only the
+# layer-baked placeholder came back). enable creates the persistent want; restart picks up
+# the code just pushed. Idempotent on re-push.
+sudo systemctl enable "site@$LABEL"
 sudo systemctl restart "site@$LABEL"
-echo "post-receive: restarted site@$LABEL -> https://$LABEL.<tenant>.cross.stream/"
+echo "post-receive: enabled + restarted site@$LABEL -> https://$LABEL.<tenant>.cross.stream/"
