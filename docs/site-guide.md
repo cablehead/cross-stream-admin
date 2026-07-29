@@ -66,11 +66,26 @@ your data on the next push.
 
 ## Platform
 
-You cannot install packages. To use a tool we don't ship, **commit a static binary to your
-repo** and call it from your handler. The executable bit is preserved by the deploy (`git
-update-index --chmod=+x` if you need to set it).
+The host is Ubuntu 24.04, but your handler runs **sandboxed** — an ephemeral non-root user,
+a read-only system, no privilege escalation — so there's no `apt-get`, `sudo`, or installing
+into the OS. You don't need it. Two things cover the gap:
 
-Build for **Ubuntu 24.04 LTS, x86_64, glibc 2.39**:
+**You have outbound internet, and it's nushell.** `http get` fetches anything at runtime —
+an API, JSON, or a **static binary** straight into your writable `state/`:
+
+```nushell
+let bin = ($env.CROSS_STREAM_SITE_STATE | path join "mytool")
+http get https://example.com/mytool-x86_64-linux | save -f $bin
+^chmod +x $bin
+# ...then run it: ^$bin --help
+```
+
+**Or pin it to a commit:** **commit a static binary to your repo** and call it from your
+handler — the executable bit is preserved by the deploy (`git update-index --chmod=+x` if you
+need to set it). Repo = pinned and versioned with your code; `state/` = fetched on demand,
+kept out of your git history.
+
+Either way, build for **Ubuntu 24.04 LTS, x86_64, glibc 2.39**:
 
 | toolchain | target |
 |-----------|--------|
@@ -78,6 +93,9 @@ Build for **Ubuntu 24.04 LTS, x86_64, glibc 2.39**:
 | Go | `GOOS=linux GOARCH=amd64 CGO_ENABLED=0` |
 | Zig / C | `-target x86_64-linux-musl`, statically linked |
 
-Already on `PATH`: `nu`, `http-nu`, `git`, `caddy`, `bat`, and `step`. For crypto beyond
-nushell's `hash sha256` / `hash md5` builtins, reach for `step` first; it covers key generation,
-JWT, and JWE without you shipping anything.
+Already on `PATH`: [`nu`](https://www.nushell.sh) (nushell),
+[`http-nu`](https://github.com/cablehead/http-nu), [`git`](https://git-scm.com),
+[`caddy`](https://caddyserver.com), [`bat`](https://github.com/sharkdp/bat) (a `cat` with
+syntax highlighting), and [`step`](https://smallstep.com/docs/step-cli) (smallstep's crypto/PKI
+CLI). For crypto beyond nushell's `hash sha256` / `hash md5` builtins, reach for `step` first;
+it covers key generation, JWT, and JWE without you shipping anything.
