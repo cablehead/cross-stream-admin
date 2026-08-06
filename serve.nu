@@ -143,22 +143,39 @@ def site-flags [label: string] {
   { store: ($s | str contains "--store"), services: ($s | str contains "--services"), datastar: ($s | str contains "--datastar") }
 }
 
-# A site's own page: push commands + restart. Also the create-landing (create redirects here).
-def site-page [label: string, user: string, cfg: record] {
+# The left column: every site, as a link that stays on whichever tab you're reading. That's the
+# whole mechanism for "keep my tab when I switch site" -- the tab is in the URL, so an ordinary
+# anchor carries it. No state, no script, and the back button behaves.
+def site-nav [label: string, tab: string, reg: list] {
+  $reg | each {|d| {
+    label: $d.label
+    href: (if $tab == "logs" { $"/s/($d.label)/logs" } else { $"/s/($d.label)" })
+    current: ($d.label == $label)
+  }}
+}
+
+# A site's own page. Two tabs over one template: `detail` (push commands, features, restart) and
+# `logs` (the live tail). Also the create-landing -- create redirects to the detail tab.
+def site-page [label: string, user: string, cfg: record, tab: string] {
   let token = (token-for $label)
   if ($token == null) {
     resp $"no such site: ($label)" 404 {}
   } else {
-    let remote = $"https://($token)@git.($cfg.tenant).cross.stream/($label).git"
-    {
+    let base = {
       tenant: $cfg.tenant, user: $user, label: $label
       host: $"($label).($cfg.tenant).cross.stream"
       state: (unit-state $"site@($label)")
-      commands: (push-commands $remote)
+      tab: $tab
+      nav: (site-nav $label $tab (load-registry))
+    }
+    let page = (if $tab == "logs" {
       # served by http-nu itself (admin.service runs with --datastar), not by this handler
-      datastar_js: $DATASTAR_JS_PATH
-      log_cap: $LOG_CAP
-    } | merge (site-flags $label) | .mj $"($TPL)/site.html"
+      $base | merge {datastar_js: $DATASTAR_JS_PATH, log_cap: $LOG_CAP}
+    } else {
+      let remote = $"https://($token)@git.($cfg.tenant).cross.stream/($label).git"
+      $base | merge {commands: (push-commands $remote)} | merge (site-flags $label)
+    })
+    $page | .mj $"($TPL)/site.html"
   }
 }
 
@@ -280,8 +297,9 @@ def do-restart [label: string] {
           let label = ($parts | get -o 0 | default "")
           if not (valid-label $label) { resp "bad label" 400 {} } else {
             match ($parts | skip 1) {
-              [] => { site-page $label (who-of $sess) $cfg }
-              ["logs"] => { logs-stream $label }
+              [] => { site-page $label (who-of $sess) $cfg "detail" }
+              ["logs"] => { site-page $label (who-of $sess) $cfg "logs" }
+              ["logs" "stream"] => { logs-stream $label }
               _ => { resp "not found" 404 {} }
             }
           }

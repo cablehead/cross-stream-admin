@@ -43,6 +43,25 @@ figure button[data-copy].copied svg:last-child { display: inline; }
 .shots figure { margin: 0; }
 .shots img { width: 100%; height: auto; display: block; border: var(--border-width-1) solid var(--neutral-4); border-radius: var(--border-radius-1); }
 
+/* the site page: a sites index down the left, the current site's tab beside it. Collapses to
+   one column on narrow screens, index first. */
+.site { display: grid; grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr); gap: var(--size-2); align-items: start; }
+.site > article { min-width: 0; }
+.site > article > h1 { margin-top: 0; }
+@media (max-width: 45rem) { .site { grid-template-columns: 1fr; } }
+
+.toc h2 { font-size: var(--font-size--1); text-transform: uppercase; letter-spacing: 0.06em; color: var(--neutral-8); margin-bottom: var(--size--1); }
+.toc ul { list-style: none; margin: 0; padding: 0; }
+.toc li { margin-block: var(--size--2); }
+.toc a { text-decoration: none; }
+.toc a[aria-current] { font-weight: 700; }
+
+/* tabs: a link row, the current one underlined. Each tab is a real URL, so switching site keeps
+   the tab and the back button works. */
+.tabs { display: flex; gap: var(--size-1); margin-block: var(--size-1) var(--size-2); border-bottom: var(--border-width-1) solid var(--neutral-4); }
+.tabs a { text-decoration: none; padding: var(--size--2) 0; margin-bottom: -1px; border-bottom: 2px solid transparent; }
+.tabs a[aria-current] { border-bottom-color: currentColor; font-weight: 700; }
+
 /* the live log panel. column-reverse on the scroller is the chat trick: one flex item, so row
    order is untouched, but the scroll position anchors to the bottom as rows are appended. */
 .logs { display: flex; flex-direction: column-reverse; overflow-y: auto; max-height: 60vh; margin-block: var(--size-2); padding: var(--size--1); background: var(--code-bg); border: var(--border-width-1) solid var(--neutral-4); border-radius: var(--border-radius-1); }

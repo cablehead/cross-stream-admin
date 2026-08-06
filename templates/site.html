@@ -1,10 +1,36 @@
 {% extends "base.html" %}
 {% block title %}{{ label }}, customerenv admin{% endblock %}
 {% block body %}
-<p><small><a href="/">&larr; sites</a></small></p>
+<div class=site>
+
+<aside class=toc>
+  <h2>Sites</h2>
+  <ul>
+  {% for s in nav %}
+    <li><a href="{{ s.href | safe }}"{% if s.current %} aria-current=page{% endif %}>{{ s.label }}</a></li>
+  {% endfor %}
+  </ul>
+  <p><small><a href="/">all sites &amp; new</a></small></p>
+</aside>
+
+<article>
 <h1>{{ label }}</h1>
 <p><a href="https://{{ host }}/">{{ host }} &rarr;</a> &middot; {{ state }}</p>
 
+<nav class=tabs>
+  <a href="/s/{{ label }}"{% if tab == "detail" %} aria-current=page{% endif %}>detail</a>
+  <a href="/s/{{ label }}/logs"{% if tab == "logs" %} aria-current=page{% endif %}>logs</a>
+</nav>
+
+{% if tab == "logs" %}
+<p><small>Live, from <code>journalctl -u site@{{ label }}</code>. Newest at the bottom; the last
+{{ log_cap }} lines are kept. Nothing is stored here, so a VM reboot starts it over.</small></p>
+<div class=logs data-init="@get('/s/{{ label }}/logs/stream', {openWhenHidden: true})">
+  <ol id=loglines></ol>
+</div>
+<script type=module src="{{ datastar_js | safe }}"></script>
+
+{% else %}
 <h2>Push to deploy</h2>
 <p>From your project (it needs a <code>serve.nu</code> at its root), run:</p>
 <figure>
@@ -29,16 +55,12 @@
 <p>The <a href="/docs">site guide</a> covers what to expect: which paths survive a deploy and which are wiped, where a SQLite file belongs, the manifest keys in full, and what to build against if you want to commit a static binary.</p>
 <p><small>Short version: the repo directory is rebuilt on every push, so keep anything you care about in <code>$env.CROSS_STREAM_SITE_STATE</code>.</small></p>
 
-<h2>Log</h2>
-<p><small>Live, from <code>journalctl -u site@{{ label }}</code>. Newest at the bottom; the last
-{{ log_cap }} lines are kept. Nothing is stored here, so a VM reboot starts it over.</small></p>
-<div class=logs data-init="@get('/s/{{ label }}/logs', {openWhenHidden: true})">
-  <ol id=loglines></ol>
-</div>
-
 <form method=post action=/restart>
   <input type=hidden name=label value="{{ label }}">
   <button>restart</button>
 </form>
-<script type=module src="{{ datastar_js | safe }}"></script>
+{% endif %}
+</article>
+
+</div>
 {% endblock %}
