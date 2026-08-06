@@ -71,7 +71,7 @@ figure button[data-copy].copied svg:last-child { display: inline; }
 .logline summary::-webkit-details-marker { display: none; }
 
 /* the columns. A request row fills all of them; a note row spans from the tag across. */
-.logline summary, .logline.note { display: grid; grid-template-columns: 4.6em 2.8em minmax(0, 1fr) 2.4em 3.4em 3.6em 7.5em; gap: 0 0.7em; align-items: baseline; padding: 0 var(--size--1); cursor: pointer; }
+.logline summary, .logline.note { display: grid; grid-template-columns: 4.6em 2.8em minmax(0, 1fr) 2.4em 3.4em 3.6em; gap: 0 0.7em; align-items: baseline; padding: 0 var(--size--1); cursor: pointer; }
 .logline.note summary, .logline.note > .ts { cursor: pointer; }
 .logline.note summary { grid-template-columns: 4.6em 5.4em minmax(0, 1fr); }
 .logline:hover { background: var(--neutral-2); }
@@ -82,7 +82,6 @@ figure button[data-copy].copied svg:last-child { display: inline; }
 .logline .status, .logline .size, .logline .dur { text-align: right; font-variant-numeric: tabular-nums; }
 .logline .status.s4, .logline .status.s5 { color: var(--danger-7, crimson); font-weight: 700; }
 .logline .pending { color: var(--neutral-6); }
-.logline .ip { color: var(--neutral-8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .logline .tag { color: var(--neutral-8); text-transform: uppercase; letter-spacing: 0.04em; }
 .logline .note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .logline.err .tag, .logline.err .note { color: var(--danger-7, crimson); }
@@ -93,5 +92,5 @@ figure button[data-copy].copied svg:last-child { display: inline; }
 .logline .payloads pre { margin: 0 0 var(--size--2) 0; padding: var(--size--1); background: var(--neutral-2); border-radius: var(--border-radius-1); white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 55rem) {
   .logline summary { grid-template-columns: 4.6em 2.8em minmax(0, 1fr) 2.4em 3.4em; }
-  .logline .dur, .logline .ip { display: none; }
+  .logline .dur { display: none; }
 }

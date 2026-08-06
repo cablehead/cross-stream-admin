@@ -272,6 +272,10 @@ def dsp [selector: string, mode: string] { to datastar-patch-elements --selector
 # to be joined before it can be sent as a single patch.
 def html-join [nodes: list] { {__html: ($nodes | each {|n| $n.__html } | str join "")} }
 
+# No client-IP column: `trusted_ip` is absent from every request across ndyg's five sites,
+# because the sites listen on unix sockets and none runs with `--trust-proxy`. It would be a
+# permanently blank column. Whatever the request carries is in its payload, one click away.
+#
 # One row per request, not three: http-nu emits request -> response -> complete sharing a
 # request_id, and they belong on one apache-style line. `res` and `comp` are null while the
 # request is still in flight, which is the live case -- the cells render pending and get patched
@@ -294,8 +298,7 @@ def row-req [i: int, ts: string, rid: string, req: record, res: any, comp: any] 
         (SPAN {class: "ts"} $ts)
         (SPAN {class: "verb"} ($req.method? | default "?"))
         (SPAN {class: "path"} ($req.path? | default ""))
-        $status $size $dur
-        (SPAN {class: "ip"} ($req.trusted_ip? | default "")))
+        $status $size $dur)
       (DIV {class: "payloads"} $payloads)
   )
 }
