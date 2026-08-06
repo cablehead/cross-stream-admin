@@ -33,26 +33,28 @@ Each bare repo carries two hooks, installed by cross-stream-admin's "create site
   files and break the next push), translates the manifest into http-nu flags written to the
   site's `env`, ensures `state/` exists, then runs `systemctl enable` + `systemctl restart site@<label>` (enable so it survives a reboot).
 
-### Sharing the hooks instead of copying them
+### Shared hooks, not per-repo copies
 
-`create site` copies the hooks into each bare repo, so every repo holds a snapshot from the
-moment it was created and a hook change never reaches sites that already exist. `core.hooksPath`
-fixes that: point each bare repo at this directory and one canonical copy serves them all.
-Verified on git 2.43: editing the canonical hook takes effect on the next push, no reinstall.
+`create site` used to copy the hooks into each bare repo, so every repo held a snapshot from the
+moment it was created and a hook change never reached sites that already existed. It now sets
+`core.hooksPath` to this directory instead, so one canonical copy serves them all and an edit
+takes effect on the next push (verified on git 2.43).
+
+The precondition for that switch was a layer that ships the hooks executable, since
+`core.hooksPath` makes git ignore `$GIT_DIR/hooks` entirely and non-executable canonical hooks
+would break every push. That's satisfied: the layer clones this repo as the admin seed and
+ce-boot-config copies it up with `cp -a`, both of which preserve the committed `0755`. Confirmed
+on the live layer `customerenv-layer-2026-07-27-githost` (admin `0f827a7`).
+
+**Bare repos created before the switch** still use their own stale copy. Backfill once per repo,
+then the copies can be deleted:
 
 ```nushell
-# replaces the two `install -m 0755 ...` lines in the admin's do-create
-^git --git-dir $bare config core.hooksPath $HOOKS_DIR
+ls /home/app/git/*.git | each {|r|
+  ^git -C $r.name config core.hooksPath /home/app/git-host
+  rm -f $"($r.name)/hooks/pre-receive" $"($r.name)/hooks/post-receive"
+}
 ```
-
-**Ordering matters.** The hooks are committed executable here, but the copies currently baked
-into the layer are `0644`; `install -m 0755` is what makes them executable on the way in. So the
-switch is only safe *after* a layer rebuild that ships them from this repo. Doing it sooner
-breaks every push on existing tenants, because `core.hooksPath` makes git ignore
-`$GIT_DIR/hooks` entirely and the canonical files would not be executable.
-
-Existing bare repos also need `core.hooksPath` set once each; until then they keep using their
-stale copy, which can then be deleted.
 
 ## The site contract
 

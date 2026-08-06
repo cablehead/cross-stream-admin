@@ -17,9 +17,10 @@ const REGISTRY = "/home/app/admin/registry.nuon"
 const SITES = "/home/app/sites"
 const GIT_ROOT = "/home/app/git"
 const TOKENS = "/home/app/git/tokens.json"
-# Canonical location of the deploy hooks. Single point of truth: when the layer moves the
-# checkout, this is the only line that changes. Also the dir `core.hooksPath` will point at
-# once the layer ships the hooks executable (see git-host/README.md).
+# Canonical location of the deploy hooks -- every bare repo's `core.hooksPath` points here, so
+# editing a hook takes effect on the next push everywhere. Single point of truth: when the layer
+# moves the checkout, this is the only line that changes. (ce-boot-config symlinks this path at
+# the merged layout /home/app/admin/git-host.)
 const HOOKS_DIR = "/home/app/git-host"
 const ASSETS = "/home/app/admin/assets"
 const TPL = "/home/app/admin/templates"
@@ -191,8 +192,8 @@ def do-create [label: string, reg: list, tenant: string] {
     } else {
       ^git -C $bare config http.receivepack true
       ^git -C $bare config http.uploadpack true
-      ^install -m 0755 $"($HOOKS_DIR)/pre-receive" $"($bare)/hooks/pre-receive"
-      ^install -m 0755 $"($HOOKS_DIR)/post-receive" $"($bare)/hooks/post-receive"
+      # one canonical copy of the hooks serves every repo -- no per-repo snapshot to go stale
+      ^git -C $bare config core.hooksPath $HOOKS_DIR
       ^chown -R app:app $bare
       save-tokens (load-tokens | insert $token $label)
       $reg | append {label: $label, created: (date now | format date "%Y-%m-%d")} | save --force $REGISTRY
