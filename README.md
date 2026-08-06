@@ -21,7 +21,14 @@ git-push path it offers tenants.
   [git-host](git-host/) gateway checks the tree out
   into `/home/app/sites/<label>/repo` and restarts `site@<label>`. Each push redeploys.
 - **Per-site page** (`/s/<label>`). Shows the push commands, the unit state, a restart button,
-  and which http-nu features the site opted into (see the site contract).
+  which http-nu features the site opted into (see the site contract), and a live log.
+- **Live log.** `/s/<label>/logs` is one long-lived SSE read that tails
+  `journalctl -u site@<label>` and appends a row per line, rendered by Datastar. Everything the
+  view needs is a parameter of that one request, so there is no shared state and no second
+  channel: a reconnect just starts a fresh tail. The tail is deliberately capped in duration
+  (see the comment on `logs-stream` for why) and Datastar's fetch retry reconnects on its own.
+  Rows are built with http-nu's HTML DSL, which escapes them -- a log line carries whatever a
+  stranger put in a request path.
 
 The label is chosen independently of any repo. It becomes the subdomain, the socket name, the
 systemd instance, and the site directory.

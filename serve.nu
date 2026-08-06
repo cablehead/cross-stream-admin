@@ -26,7 +26,14 @@ const ASSETS = "/home/app/admin/assets"
 const TPL = "/home/app/admin/templates"
 const SHOTS = "/home/app/admin/screenshots"
 const DOCS = "/home/app/admin/docs"
+# live log tail: how much backlog to open with, how many rows the panel holds, and how long one
+# tail may live before the client reconnects (see logs-stream for why the cap exists)
+const LOG_TAIL = 200
+const LOG_CAP = 500
+const LOG_WINDOW = 900
 use /home/app/admin/oauth/lib.nu *
+use http-nu/html *
+use http-nu/datastar *
 
 def verify-token [token: string, cfg: record] {
   let r = ($token | ^$STEP crypto jwt verify --key $BROKER_PUB --iss $cfg.broker --aud $cfg.tenant | complete)
@@ -148,6 +155,9 @@ def site-page [label: string, user: string, cfg: record] {
       host: $"($label).($cfg.tenant).cross.stream"
       state: (unit-state $"site@($label)")
       commands: (push-commands $remote)
+      # served by http-nu itself (admin.service runs with --datastar), not by this handler
+      datastar_js: $DATASTAR_JS_PATH
+      log_cap: $LOG_CAP
     } | merge (site-flags $label) | .mj $"($TPL)/site.html"
   }
 }
@@ -202,6 +212,49 @@ def do-create [label: string, reg: list, tenant: string] {
   }
 }
 
+# A site's live log, as one long-lived SSE read (/s/<label>/logs). The stream IS the state:
+# journalctl -f is the only source, the label is the only parameter, and nothing here is shared
+# with any other request -- a reconnect just starts a fresh journalctl. Datastar retries the
+# fetch on its own, so a dropped connection or a site restart self-heals with no code.
+#
+# Rows are built with the HTML DSL, which escapes plain strings. That matters: a log line
+# carries the request path and Host header of whoever hit the site. Never pass one through
+# `{__html:}`, `.md`, or `.highlight` (all of which mean "already sanitized"), and never put one
+# in a data-* attribute -- those are Datastar expressions, evaluated, so escaping doesn't cover
+# them.
+def logs-stream [label: string] {
+  # `timeout` is load-bearing, not a safety belt. http-nu does not reap the child when the
+  # browser goes away: measured on 0.17.2, a bare `journalctl -f` stayed a live child of the
+  # server long after the client disconnected, and a heartbeat write did not change that. So
+  # every abandoned panel would hold a tail open until the admin restarts. Capping the child's
+  # life bounds that to one window, and Datastar's own fetch retry reconnects with no code.
+  # (`timeout` is coreutils, from the agnostic base image, not the customerenv layer.)
+  #
+  # Each connection therefore re-tails the backlog, so clear the panel first: without it a
+  # reconnect appends a second copy of the last $LOG_TAIL lines, with ids that collide.
+  ^timeout $"($LOG_WINDOW)" journalctl -u $"site@($label)" -o json -n $LOG_TAIL -f
+  | lines
+  | enumerate
+  | each {|it|
+      let e = ($it.item | from json)
+      let ts = (try { ($e.__REALTIME_TIMESTAMP | into int) * 1000 | into datetime | format date "%H:%M:%S" } catch { "" })
+      # MESSAGE comes back as a byte list when the line isn't valid UTF-8; show it either way
+      let msg = (if ($e.MESSAGE? | describe) == "string" { $e.MESSAGE } else { $e.MESSAGE? | default "" | to json -r })
+      let row = (LI {id: $"log-($it.index)" class: "logline"} (SPAN {class: "ts"} $ts) (SPAN {class: "msg"} $msg)
+        | to datastar-patch-elements --selector "#loglines" --mode append)
+      # bounded panel: drop the row that just fell out of the window
+      if $it.index >= $LOG_CAP {
+        [$row ("" | to datastar-patch-elements --selector $"#log-($it.index - $LOG_CAP)" --mode remove)]
+      } else {
+        [$row]
+      }
+    }
+  | flatten
+  # `prepend`, not a leading list: it keeps the pipeline lazy, and the rows still stream
+  | prepend ("" | to datastar-patch-elements --selector "#loglines" --mode inner)
+  | to sse
+}
+
 def do-restart [label: string] {
   let r = (^systemctl restart $"site@($label)" | complete)
   if $r.exit_code != 0 { resp $"restart failed: ($r.stderr)" 500 {} } else { resp "" 302 {Location: $"/s/($label)"} }
@@ -223,8 +276,15 @@ def do-restart [label: string] {
         if ($sess | is-empty) { resp "" 302 {Location: "/"} } else if ($req.path == "/screenshots") { screenshots-page (who-of $sess) $cfg } else { serve-file $SHOTS "/screenshots/" $req.path "image/png" }
       } else if ($req.path | str starts-with "/s/") {
         if ($sess | is-empty) { resp "" 302 {Location: "/"} } else {
-          let label = ($req.path | str replace --regex '^/s/' '' | str replace --all '/' '')
-          if (valid-label $label) { site-page $label (who-of $sess) $cfg } else { resp "bad label" 400 {} }
+          let parts = ($req.path | str replace --regex '^/s/' '' | split row '/' | where {|p| $p != ""})
+          let label = ($parts | get -o 0 | default "")
+          if not (valid-label $label) { resp "bad label" 400 {} } else {
+            match ($parts | skip 1) {
+              [] => { site-page $label (who-of $sess) $cfg }
+              ["logs"] => { logs-stream $label }
+              _ => { resp "not found" 404 {} }
+            }
+          }
         }
       } else {
         match $req.path {

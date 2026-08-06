@@ -42,3 +42,11 @@ figure button[data-copy].copied svg:last-child { display: inline; }
 .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--size-2); margin-block: var(--size-2); }
 .shots figure { margin: 0; }
 .shots img { width: 100%; height: auto; display: block; border: var(--border-width-1) solid var(--neutral-4); border-radius: var(--border-radius-1); }
+
+/* the live log panel. column-reverse on the scroller is the chat trick: one flex item, so row
+   order is untouched, but the scroll position anchors to the bottom as rows are appended. */
+.logs { display: flex; flex-direction: column-reverse; overflow-y: auto; max-height: 60vh; margin-block: var(--size-2); padding: var(--size--1); background: var(--code-bg); border: var(--border-width-1) solid var(--neutral-4); border-radius: var(--border-radius-1); }
+.logs ol { margin: 0; padding: 0; list-style: none; }
+.logline { display: flex; gap: var(--size--1); font-family: var(--font-mono); font-size: var(--font-size--1); line-height: 1.5; }
+.logline .ts { flex: none; color: var(--neutral-8); font-variant-numeric: tabular-nums; }
+.logline .msg { overflow-wrap: anywhere; white-space: pre-wrap; }

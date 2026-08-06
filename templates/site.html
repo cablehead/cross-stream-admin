@@ -29,8 +29,16 @@
 <p>The <a href="/docs">site guide</a> covers what to expect: which paths survive a deploy and which are wiped, where a SQLite file belongs, the manifest keys in full, and what to build against if you want to commit a static binary.</p>
 <p><small>Short version: the repo directory is rebuilt on every push, so keep anything you care about in <code>$env.SITE_STATE</code>.</small></p>
 
+<h2>Log</h2>
+<p><small>Live, from <code>journalctl -u site@{{ label }}</code>. Newest at the bottom; the last
+{{ log_cap }} lines are kept. Nothing is stored here, so a VM reboot starts it over.</small></p>
+<div class=logs data-init="@get('/s/{{ label }}/logs', {openWhenHidden: true})">
+  <ol id=loglines></ol>
+</div>
+
 <form method=post action=/restart>
   <input type=hidden name=label value="{{ label }}">
   <button>restart</button>
 </form>
+<script type=module src="{{ datastar_js | safe }}"></script>
 {% endblock %}
