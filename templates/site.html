@@ -23,9 +23,8 @@
 </nav>
 
 {% if tab == "logs" %}
-<p><small>Live, from <code>journalctl -u site@{{ label }}</code>, newest first. One line per
-request; click it for the payloads. Bounded to the last {{ log_cap }} journal lines. Nothing is
-stored here, so a VM reboot starts it over.</small></p>
+<p class=lede>Newest first, one line per request; click one for its payloads. The last
+{{ log_cap }} lines of <code>journalctl -u site@{{ label }}</code>, held in the page only.</p>
 <ol class=log id=loglines data-init="@get('/s/{{ label }}/logs/stream', {openWhenHidden: true})"></ol>
 <script type=module src="{{ datastar_js | safe }}"></script>
 
