@@ -229,17 +229,18 @@ def do-create [label: string, reg: list, tenant: string] {
   }
 }
 
-# A site's live log, as one long-lived SSE read (/s/<label>/logs). The stream IS the state:
-# journalctl -f is the only source, the label is the only parameter, and nothing here is shared
-# with any other request -- a reconnect just starts a fresh journalctl. Datastar retries the
-# fetch on its own, so a dropped connection or a site restart self-heals with no code.
+# A site's live log, at /s/<label>/logs/stream. The stream IS the state: journalctl is the only
+# source, the label is the only parameter, and nothing is shared with any other request -- a
+# reconnect just re-reads. Datastar retries the fetch itself, so a dropped connection or a site
+# restart self-heals with no code.
 #
 # Rows are built with the HTML DSL, which escapes plain strings. That matters: a log line
 # carries the request path and Host header of whoever hit the site. Never pass one through
-# `{__html:}`, `.md`, or `.highlight` (all of which mean "already sanitized"), and never put one
-# in a data-* attribute -- those are Datastar expressions, evaluated, so escaping doesn't cover
-# them.
-# --- log rows -----------------------------------------------------------------------------
+# `{__html:}` or `.md`, and never put one in a data-* attribute -- those are Datastar
+# expressions, evaluated, so escaping does not cover them. `.highlight` also returns `{__html:}`
+# but escapes its input first (checked with a payload carrying `<img onerror=>`), so it is safe
+# on log content.
+#
 # The shapes a site's journal actually holds, counted over 1422 lines across ndyg's five sites:
 #
 #   http-nu jsonl        request / response / complete  (three per request, ~78% of all lines)
@@ -247,9 +248,6 @@ def do-create [label: string, reg: list, tenant: string] {
 #   systemd              "Started site@x.service - ...", "Stopped ...", "Deactivated
 #                        successfully.", "Consumed 13.561s CPU time."
 #   raw                  panics and their `note:` trailer
-#
-# Only the first group is JSON, and only it gets an expander. Everything else is shown verbatim
-# because there is nothing more to show.
 
 # Gate on a leading `{` rather than just trying `from json`: nushell's parser is lenient enough
 # to read `site@cube.service: Deactivated successfully.` as a one-field record, so parsing
@@ -262,95 +260,173 @@ def log-parse [raw: string] {
 }
 
 def log-bytes [n: int] {
-  if $n < 1024 { $"($n) B" } else if $n < 1048576 { $"(($n / 1024 * 10 | math round) / 10) kB" } else { $"(($n / 1048576 * 10 | math round) / 10) MB" }
+  if $n < 1024 { $"($n)B" } else if $n < 1048576 { $"(($n / 1024 * 10 | math round) / 10)k" } else { $"(($n / 1048576 * 10 | math round) / 10)M" }
 }
 
-# The terse line, one per shape. Kept to a tag plus the few fields you actually scan for; the
-# rest is one click away.
-def log-terse [v: record] {
-  let kind = ($v | get -o message | default "")
-  match $kind {
-    "request" => [
-      (SPAN {class: "tag req"} "req")
-      (SPAN {class: "msg"} $"($v.method? | default '?') ($v.path? | default '')")
-      (SPAN {class: "dim"} ($v.trusted_ip? | default ""))
-    ]
-    "response" => [
-      (SPAN {class: $"tag res s(($v.status? | default 0) // 100)"} ($v.status? | default "?" | into string))
-      (SPAN {class: "dim"} $"($v.latency_ms? | default '?') ms to first byte")
-    ]
-    "complete" => [
-      (SPAN {class: "tag done"} "done")
-      (SPAN {class: "dim"} $"(log-bytes ($v.bytes? | default 0)) in ($v.duration_ms? | default '?') ms")
-    ]
-    "started" => [
-      (SPAN {class: "tag life"} "started")
-      (SPAN {class: "msg"} ($v.address? | default ""))
-      (SPAN {class: "dim"} $"nu ($v.nu_version? | default '?') · up in ($v.startup_ms? | default '?') ms")
-    ]
-    "stopping" => [(SPAN {class: "tag life"} "stopping") (SPAN {class: "dim"} $"($v.inflight? | default 0) in flight")]
-    "stopped" => [(SPAN {class: "tag life"} "stopped")]
-    "error" => [
-      (SPAN {class: "tag err"} "error")
-      # a nushell error is a rendered block; its first non-empty line is the headline
-      (SPAN {class: "msg"} (($v.error? | default "" | lines | where {|l| ($l | str trim) != ""} | get -o 0 | default "") | str trim))
-    ]
-    _ => [
-      (SPAN {class: "tag"} (if ($kind | is-empty) { "json" } else { $kind }))
-      (SPAN {class: "dim"} ($v | columns | str join " "))
-    ]
-  }
+# A payload block, syntax-highlighted. These stack under a row, one per event it has seen.
+def log-payload [v: record] { PRE ($v | to json --indent 2 | .highlight json) }
+
+def dsp [selector: string, mode: string] { to datastar-patch-elements --selector $selector --mode $mode }
+
+# `to datastar-patch-elements` takes one string or one {__html} record, so a batch of rows has
+# to be joined before it can be sent as a single patch.
+def html-join [nodes: list] { {__html: ($nodes | each {|n| $n.__html } | str join "")} }
+
+# One row per request, not three: http-nu emits request -> response -> complete sharing a
+# request_id, and they belong on one apache-style line. `res` and `comp` are null while the
+# request is still in flight, which is the live case -- the cells render pending and get patched
+# when those events arrive. The backlog passes all three at once and renders the row finished.
+#
+# Correlation is a class, `r-<request_id>`, not an id: the row's id stays the line index, which
+# is what the panel cap removes by. A class also sidesteps a CSS problem -- a scru128
+# request_id starts with a digit, and `.03gmk...` is not a valid selector.
+def row-req [i: int, ts: string, rid: string, req: record, res: any, comp: any] {
+  let status = (if $res == null { SPAN {class: "status pending"} "-" } else {
+    let st = ($res.status? | default 0)
+    SPAN {class: $"status s(($st // 100))"} ($st | into string)
+  })
+  let size = (if $comp == null { SPAN {class: "size pending"} "-" } else { SPAN {class: "size"} (log-bytes ($comp.bytes? | default 0)) })
+  let dur = (if $comp == null { SPAN {class: "dur pending"} "-" } else { SPAN {class: "dur"} $"($comp.duration_ms? | default 0)ms" })
+  let payloads = ([$req $res $comp] | where {|v| $v != null } | each {|v| log-payload $v })
+  LI {id: $"log-($i)" class: $"logline r-($rid)"} (
+    DETAILS
+      (SUMMARY
+        (SPAN {class: "ts"} $ts)
+        (SPAN {class: "verb"} ($req.method? | default "?"))
+        (SPAN {class: "path"} ($req.path? | default ""))
+        $status $size $dur
+        (SPAN {class: "ip"} ($req.trusted_ip? | default "")))
+      (DIV {class: "payloads"} $payloads)
+  )
 }
 
-# What the expander shows. Pretty JSON, except for an error, whose payload is already a
-# rendered multi-line block -- as JSON it would be one line of escaped \n.
-def log-detail [v: record] {
-  if ($v | get -o message) == "error" { $v.error? | default "" } else { $v | to json --indent 2 }
-}
-
-def log-row [id: string, ts: string, raw: string] {
-  let v = (log-parse $raw)
+# Everything that is not a request: lifecycle, error, an http-nu event we do not know, an
+# orphaned response whose request fell outside the window, and the systemd / panic lines that
+# are not JSON at all. One row, same grid, nothing pending.
+def row-note [i: int, ts: string, v: any, raw: string] {
+  let kind = (if $v == null { "" } else { $v | get -o message | default "" })
+  let text = (match $kind {
+    "started" => $"($v.address? | default '') nu ($v.nu_version? | default '?') up in ($v.startup_ms? | default '?')ms"
+    "stopping" => $"($v.inflight? | default 0) in flight"
+    "stopped" => ""
+    "error" => (($v.error? | default "" | lines | where {|l| ($l | str trim) != ""} | get -o 0 | default "") | str trim)
+    "response" => $"($v.status? | default '?') in ($v.latency_ms? | default '?')ms, request not in window"
+    "complete" => $"(log-bytes ($v.bytes? | default 0)) in ($v.duration_ms? | default '?')ms, request not in window"
+    "" => $raw
+    _ => ($v | columns | str join " ")
+  })
+  let tag = (if ($kind | is-empty) { "log" } else { $kind })
+  let cls = (match $kind { "error" => "logline note err", "" => "logline note", _ => "logline note life" })
   if $v == null {
-    LI {id: $id class: "logline plain"} (SPAN {class: "ts"} $ts) (SPAN {class: "msg"} $raw)
+    LI {id: $"log-($i)" class: $cls} (SPAN {class: "ts"} $ts) (SPAN {class: "tag"} $tag) (SPAN {class: "note"} $text)
   } else {
-    LI {id: $id class: "logline"} (
-      DETAILS (SUMMARY (SPAN {class: "ts"} $ts) (log-terse $v)) (PRE (log-detail $v))
+    # an error's payload is already a rendered block; as JSON it is one line of escaped \n
+    let body = (if $kind == "error" { PRE ($v.error? | default "") } else { log-payload $v })
+    LI {id: $"log-($i)" class: $cls} (
+      DETAILS
+        (SUMMARY (SPAN {class: "ts"} $ts) (SPAN {class: "tag"} $tag) (SPAN {class: "note"} $text))
+        (DIV {class: "payloads"} $body)
     )
   }
 }
 
+def log-stamp [e: record] {
+  try { ($e.__REALTIME_TIMESTAMP | into int) * 1000 | into datetime | format date "%H:%M:%S" } catch { "" }
+}
+
+# MESSAGE comes back as a byte list when the line is not valid UTF-8; show it either way.
+def log-message [e: record] {
+  if ($e.MESSAGE? | describe) == "string" { $e.MESSAGE } else { $e.MESSAGE? | default "" | to json -r }
+}
+
+# The backlog is finite, so its requests can be stitched here rather than in the browser: each
+# `request` collects the response and complete that share its id, and the two follow-ups are
+# then dropped rather than sent as patches of their own.
+def backlog-rows [entries: list] {
+  let parsed = ($entries | enumerate | each {|it| {
+    i: $it.index, ts: (log-stamp $it.item), raw: (log-message $it.item), v: (log-parse (log-message $it.item))
+  }})
+  let by_rid = ($parsed | where {|p| $p.v != null } | where {|p| ($p.v | get -o request_id) != null })
+  let followed = ($by_rid | where {|p| ($p.v | get -o message) in ["response" "complete"] }
+    | where {|p| $by_rid | any {|q| ($q.v | get -o message) == "request" and ($q.v.request_id == $p.v.request_id) } }
+    | get i)
+  $parsed | where {|p| $p.i not-in $followed } | each {|p|
+    let rid = (if $p.v == null { null } else { $p.v | get -o request_id })
+    if $rid != null and (($p.v | get -o message) == "request") {
+      let rest = ($by_rid | where {|q| $q.v.request_id == $rid })
+      row-req $p.i $p.ts $rid $p.v ($rest | where {|q| ($q.v | get -o message) == "response" } | get -o 0.v) ($rest | where {|q| ($q.v | get -o message) == "complete" } | get -o 0.v)
+    } else {
+      row-note $p.i $p.ts $p.v $p.raw
+    }
+  }
+}
+
+# One live journal line in, zero or more patches out. A request opens a row; its response and
+# complete fill the pending cells and push their payload under it. If the row is not there --
+# the read opened mid-request, or it aged out of the cap -- the selectors match nothing and the
+# patches are no-ops.
+def live-events [i: int, e: record] {
+  let ts = (log-stamp $e)
+  let raw = (log-message $e)
+  let v = (log-parse $raw)
+  let rid = (if $v == null { null } else { $v | get -o request_id })
+  let kind = (if $v == null { "" } else { $v | get -o message | default "" })
+  if $rid == null or ($kind not-in ["request" "response" "complete"]) {
+    [((row-note $i $ts $v $raw) | dsp "#loglines" "prepend")]
+  } else if $kind == "request" {
+    [((row-req $i $ts $rid $v null null) | dsp "#loglines" "prepend")]
+  } else {
+    let cells = (if $kind == "response" {
+      let st = ($v.status? | default 0)
+      [(SPAN {class: $"status s(($st // 100))"} ($st | into string) | dsp $".r-($rid) .status" "outer")]
+    } else {
+      [
+        (SPAN {class: "size"} (log-bytes ($v.bytes? | default 0)) | dsp $".r-($rid) .size" "outer")
+        (SPAN {class: "dur"} $"($v.duration_ms? | default 0)ms" | dsp $".r-($rid) .dur" "outer")
+      ]
+    })
+    $cells | append (log-payload $v | dsp $".r-($rid) .payloads" "append")
+  }
+}
+
 def logs-stream [label: string] {
+  # Backlog first, held and sent as ONE patch rather than dribbled out a row at a time. This is
+  # the threshold-gate shape from http-nu's examples (examples/quotes/serve.nu) without needing
+  # the gate: an xs stream marks the replay/live boundary with an `xs.threshold` frame, and
+  # journald has no such marker -- but every entry carries a `__CURSOR`, so reading the backlog
+  # to completion and then following `--after-cursor` from its last one draws the boundary
+  # exactly, with no gap and no line delivered twice.
+  let backlog = (^journalctl -u $"site@($label)" -o json -n $LOG_TAIL --no-pager | complete | get stdout | lines
+    | each {|l| try { $l | from json } catch { null } } | where {|e| $e != null })
+  let cursor = ($backlog | last | get -o __CURSOR | default "")
+  # `inner` both seeds and clears: each read re-renders the backlog, and without replacing the
+  # panel a reconnect would show it twice, with colliding ids. Reversed because the panel runs
+  # newest first.
+  let seed = (html-join (backlog-rows $backlog | reverse) | dsp "#loglines" "inner")
+
   # `timeout` is load-bearing, not a safety belt. http-nu does not reap the child when the
   # browser goes away: measured on 0.17.2, a bare `journalctl -f` stayed a live child of the
   # server long after the client disconnected, and a heartbeat write did not change that. So
   # every abandoned panel would hold a tail open until the admin restarts. Capping the child's
-  # life bounds that to one window, and Datastar's own fetch retry reconnects with no code.
+  # life bounds that to one window, and Datastar's own retry reconnects.
   # (`timeout` is coreutils, from the agnostic base image, not the customerenv layer.)
-  #
-  # Each connection therefore re-tails the backlog, so clear the panel first: without it a
-  # reconnect appends a second copy of the last $LOG_TAIL lines, with ids that collide.
-  ^timeout $"($LOG_WINDOW)" journalctl -u $"site@($label)" -o json -n $LOG_TAIL -f
+  let base = ($backlog | length)
+  (^timeout $"($LOG_WINDOW)" journalctl -u $"site@($label)" -o json -f --after-cursor $cursor
   | lines
   | enumerate
   | each {|it|
-      let e = ($it.item | from json)
-      let ts = (try { ($e.__REALTIME_TIMESTAMP | into int) * 1000 | into datetime | format date "%H:%M:%S" } catch { "" })
-      # MESSAGE comes back as a byte list when the line isn't valid UTF-8; show it either way
-      let msg = (if ($e.MESSAGE? | describe) == "string" { $e.MESSAGE } else { $e.MESSAGE? | default "" | to json -r })
-      # newest first: prepend, so the top of the panel is the live edge and you never chase it
-      let row = (log-row $"log-($it.index)" $ts $msg
-        | to datastar-patch-elements --selector "#loglines" --mode prepend)
-      # bounded panel: drop the row that just fell out of the window -- oldest, so bottom now
-      if $it.index >= $LOG_CAP {
-        [$row ("" | to datastar-patch-elements --selector $"#log-($it.index - $LOG_CAP)" --mode remove)]
-      } else {
-        [$row]
+      let e = (try { $it.item | from json } catch { null })
+      if $e == null { [] } else {
+        let i = ($base + $it.index)
+        let evs = (live-events $i $e)
+        # bounded panel: drop whatever row line i-$LOG_CAP created, if it created one
+        if $i >= $LOG_CAP { $evs | append ("" | dsp $"#log-($i - $LOG_CAP)" "remove") } else { $evs }
       }
     }
   | flatten
-  # `prepend`, not a leading list: it keeps the pipeline lazy, and the rows still stream
-  | prepend ("" | to datastar-patch-elements --selector "#loglines" --mode inner)
-  | to sse
+  # `prepend`, not a leading list: it keeps the tail lazy. A list literal would not parse here,
+  # and `let` on the follow stream would try to collect it forever.
+  | prepend $seed) | to sse
 }
 
 def do-restart [label: string] {

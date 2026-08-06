@@ -62,21 +62,36 @@ figure button[data-copy].copied svg:last-child { display: inline; }
 .tabs a { text-decoration: none; padding: var(--size--2) 0; margin-bottom: -1px; border-bottom: 2px solid transparent; }
 .tabs a[aria-current] { border-bottom-color: currentColor; font-weight: 700; }
 
-/* the live log panel. Newest first, so the panel does not move under you and there is no
-   scroll-anchoring trick to maintain: the live edge is always the top line. */
-.logs { overflow-y: auto; max-height: 60vh; margin-block: var(--size-2); padding: var(--size--1); background: var(--code-bg); border: var(--border-width-1) solid var(--neutral-4); border-radius: var(--border-radius-1); }
+/* the live log panel: one line per request, apache-ish columns, newest at the top. Dense on
+   purpose -- the point is to scan a screenful, not to read one entry. */
+.logs { overflow-y: auto; max-height: 70vh; margin-block: var(--size-1); padding: var(--size--2) 0; background: var(--code-bg); border: var(--border-width-1) solid var(--neutral-4); border-radius: var(--border-radius-1); }
 .logs ol { margin: 0; padding: 0; list-style: none; }
-.logline { font-family: var(--font-mono); font-size: var(--font-size--1); line-height: 1.6; }
-.logline summary { display: flex; gap: var(--size--1); align-items: baseline; cursor: pointer; }
-.logline summary::marker { color: var(--neutral-7); }
-.logline.plain { display: flex; gap: var(--size--1); padding-left: var(--size-1); }
-.logline .ts { flex: none; color: var(--neutral-8); font-variant-numeric: tabular-nums; }
-.logline .msg { overflow-wrap: anywhere; }
-.logline .dim { color: var(--neutral-8); overflow-wrap: anywhere; }
-/* the shape tag: fixed width so the terse lines column up and you can scan one kind out */
-.logline .tag { flex: none; width: 4.5em; color: var(--neutral-8); text-transform: uppercase; font-size: 0.85em; letter-spacing: 0.04em; }
-.logline .tag.err { color: var(--danger-7, crimson); font-weight: 700; }
-.logline .tag.life { font-weight: 700; }
-.logline .tag.s4, .logline .tag.s5 { color: var(--danger-7, crimson); font-weight: 700; }
-.logline details[open] { padding-bottom: var(--size--1); }
-.logline details pre { margin: var(--size--2) 0 0 var(--size-1); padding: var(--size--1); background: var(--neutral-2); border-radius: var(--border-radius-1); font-size: 0.95em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.logline { font-family: var(--font-mono); font-size: var(--font-size--2, 0.78rem); line-height: 1.45; }
+.logline > details > summary, .logline.note:not(:has(details)) { list-style: none; }
+.logline summary::-webkit-details-marker { display: none; }
+
+/* the columns. A request row fills all of them; a note row spans from the tag across. */
+.logline summary, .logline.note { display: grid; grid-template-columns: 4.6em 2.8em minmax(0, 1fr) 2.4em 3.4em 3.6em 7.5em; gap: 0 0.7em; align-items: baseline; padding: 0 var(--size--1); cursor: pointer; }
+.logline.note summary, .logline.note > .ts { cursor: pointer; }
+.logline.note summary { grid-template-columns: 4.6em 5.4em minmax(0, 1fr); }
+.logline:hover { background: var(--neutral-2); }
+
+.logline .ts { color: var(--neutral-8); font-variant-numeric: tabular-nums; }
+.logline .verb { font-weight: 700; }
+.logline .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logline .status, .logline .size, .logline .dur { text-align: right; font-variant-numeric: tabular-nums; }
+.logline .status.s4, .logline .status.s5 { color: var(--danger-7, crimson); font-weight: 700; }
+.logline .pending { color: var(--neutral-6); }
+.logline .ip { color: var(--neutral-8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logline .tag { color: var(--neutral-8); text-transform: uppercase; letter-spacing: 0.04em; }
+.logline .note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logline.err .tag, .logline.err .note { color: var(--danger-7, crimson); }
+.logline.life .tag { font-weight: 700; }
+
+/* payloads stack under their row as the request's events land */
+.logline .payloads { padding: var(--size--2) var(--size--1) var(--size--1) 5.3em; }
+.logline .payloads pre { margin: 0 0 var(--size--2) 0; padding: var(--size--1); background: var(--neutral-2); border-radius: var(--border-radius-1); white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 55rem) {
+  .logline summary { grid-template-columns: 4.6em 2.8em minmax(0, 1fr) 2.4em 3.4em; }
+  .logline .dur, .logline .ip { display: none; }
+}
