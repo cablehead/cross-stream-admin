@@ -266,6 +266,11 @@ def log-bytes [n: int] {
 # A payload block, syntax-highlighted. These stack under a row, one per event it has seen.
 def log-payload [v: record] { PRE ($v | to json --indent 2 | .highlight json) }
 
+# Rows carry no styling classes: the cells are the tags that mean what they hold -- time, b,
+# code, data, small -- and the panel styles them by descending from its one class. The only
+# hooks here are behavioural: the line-index id the cap removes by, and the r-<request_id>
+# class the follow-up events patch through.
+
 def dsp [selector: string, mode: string] { to datastar-patch-elements --selector $selector --mode $mode }
 
 # `to datastar-patch-elements` takes one string or one {__html} record, so a batch of rows has
@@ -285,21 +290,17 @@ def html-join [nodes: list] { {__html: ($nodes | each {|n| $n.__html } | str joi
 # is what the panel cap removes by. A class also sidesteps a CSS problem -- a scru128
 # request_id starts with a digit, and `.03gmk...` is not a valid selector.
 def row-req [i: int, ts: string, rid: string, req: record, res: any, comp: any] {
-  let status = (if $res == null { SPAN {class: "status pending"} "-" } else {
-    let st = ($res.status? | default 0)
-    SPAN {class: $"status s(($st // 100))"} ($st | into string)
-  })
-  let size = (if $comp == null { SPAN {class: "size pending"} "-" } else { SPAN {class: "size"} (log-bytes ($comp.bytes? | default 0)) })
-  let dur = (if $comp == null { SPAN {class: "dur pending"} "-" } else { SPAN {class: "dur"} $"($comp.duration_ms? | default 0)ms" })
-  let payloads = ([$req $res $comp] | where {|v| $v != null } | each {|v| log-payload $v })
-  LI {id: $"log-($i)" class: $"logline r-($rid)"} (
+  let st = (if $res == null { "" } else { $res.status? | default 0 | into string })
+  LI {id: $"log-($i)" class: $"r-($rid)"} (
     DETAILS
       (SUMMARY
-        (SPAN {class: "ts"} $ts)
-        (SPAN {class: "verb"} ($req.method? | default "?"))
-        (SPAN {class: "path"} ($req.path? | default ""))
-        $status $size $dur)
-      (DIV {class: "payloads"} $payloads)
+        (TIME $ts)
+        (B ($req.method? | default "?"))
+        (CODE ($req.path? | default ""))
+        (DATA {value: $st} $st)
+        (SMALL (if $comp == null { "" } else { log-bytes ($comp.bytes? | default 0) }))
+        (SMALL (if $comp == null { "" } else { $"($comp.duration_ms? | default 0)ms" })))
+      ([$req $res $comp] | where {|v| $v != null } | each {|v| log-payload $v })
   )
 }
 
@@ -319,19 +320,14 @@ def row-note [i: int, ts: string, v: any, raw: string] {
     _ => ($v | columns | str join " ")
   })
   let tag = (if ($kind | is-empty) { "log" } else { $kind })
-  let cls = (match $kind { "error" => "logline note err", "" => "logline note", _ => "logline note life" })
   if $v == null {
-    # no expander: a systemd line or a panic has nothing behind it. `plain` is what carries the
-    # column grid, since there is no <summary> here to put it on.
-    LI {id: $"log-($i)" class: $"($cls) plain"} (SPAN {class: "ts"} $ts) (SPAN {class: "tag"} $tag) (SPAN {class: "note"} $text)
+    # nothing behind a systemd line or a panic, so no expander -- and no <summary> either, so
+    # the row itself is the line. The note spans the columns a request would fill.
+    LI {id: $"log-($i)"} (TIME $ts) (B $tag) (SPAN $text)
   } else {
     # an error's payload is already a rendered block; as JSON it is one line of escaped \n
     let body = (if $kind == "error" { PRE ($v.error? | default "") } else { log-payload $v })
-    LI {id: $"log-($i)" class: $cls} (
-      DETAILS
-        (SUMMARY (SPAN {class: "ts"} $ts) (SPAN {class: "tag"} $tag) (SPAN {class: "note"} $text))
-        (DIV {class: "payloads"} $body)
-    )
+    LI {id: $"log-($i)"} (DETAILS (SUMMARY (TIME $ts) (B $tag) (SPAN $text)) $body)
   }
 }
 
@@ -381,16 +377,17 @@ def live-events [i: int, e: record] {
   } else if $kind == "request" {
     [((row-req $i $ts $rid $v null null) | dsp "#loglines" "prepend")]
   } else {
+    # the cells are addressed by their tag and position, the same way they are styled
     let cells = (if $kind == "response" {
-      let st = ($v.status? | default 0)
-      [(SPAN {class: $"status s(($st // 100))"} ($st | into string) | dsp $".r-($rid) .status" "outer")]
+      let st = ($v.status? | default 0 | into string)
+      [(DATA {value: $st} $st | dsp $".r-($rid) data" "outer")]
     } else {
       [
-        (SPAN {class: "size"} (log-bytes ($v.bytes? | default 0)) | dsp $".r-($rid) .size" "outer")
-        (SPAN {class: "dur"} $"($v.duration_ms? | default 0)ms" | dsp $".r-($rid) .dur" "outer")
+        (SMALL (log-bytes ($v.bytes? | default 0)) | dsp $".r-($rid) small:first-of-type" "outer")
+        (SMALL $"($v.duration_ms? | default 0)ms" | dsp $".r-($rid) small:last-of-type" "outer")
       ]
     })
-    $cells | append (log-payload $v | dsp $".r-($rid) .payloads" "append")
+    $cells | append (log-payload $v | dsp $".r-($rid) details" "append")
   }
 }
 

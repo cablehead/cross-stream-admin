@@ -26,9 +26,7 @@
 <p><small>Live, from <code>journalctl -u site@{{ label }}</code>, newest first. One line per
 request; click it for the payloads. Bounded to the last {{ log_cap }} journal lines. Nothing is
 stored here, so a VM reboot starts it over.</small></p>
-<div class=logs data-init="@get('/s/{{ label }}/logs/stream', {openWhenHidden: true})">
-  <ol id=loglines></ol>
-</div>
+<ol class=log id=loglines data-init="@get('/s/{{ label }}/logs/stream', {openWhenHidden: true})"></ol>
 <script type=module src="{{ datastar_js | safe }}"></script>
 
 {% else %}
