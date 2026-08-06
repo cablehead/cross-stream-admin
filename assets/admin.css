@@ -9,7 +9,7 @@
  */
 
 /* the page column: the raw <main> wrapper, centered at a reading width */
-main { max-width: min(96vw, 96rem); margin-inline: auto; padding: var(--size-1) var(--size-2) var(--size-3); }
+main { max-width: 60rem; margin-inline: auto; padding: var(--size-1) var(--size-2) var(--size-3); }
 
 /* header: a raw <nav> flex row; the brand shoves everything after it to the right edge */
 /* the page header. Scoped to a direct child of main: the tab row is a nav too, and was
@@ -48,8 +48,7 @@ figure button[data-copy].copied svg:last-child { display: inline; }
 /* the site page: a sites index down the left, the current site's tab beside it. Collapses to
    one column on narrow screens, index first. */
 .site { display: grid; grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr); gap: var(--size-2); align-items: start; }
-/* the console is not prose: drop base's reading measure so a view fills the page */
-.site > article { min-width: 0; max-width: none; }
+.site > article { min-width: 0; }
 .site > article > h1 { margin-top: 0; }
 @media (max-width: 45rem) { .site { grid-template-columns: 1fr; } }
 
@@ -73,7 +72,7 @@ figure button[data-copy].copied svg:last-child { display: inline; }
    (size, duration) -- so a row carries no classes of its own. base.css dresses raw tags for
    prose, which is a card for details and a box for pre; inside the panel none of that applies,
    so it is undressed once here rather than fought per element. */
-.log { margin-block: var(--size--1) var(--size-2); font-family: var(--font-mono); font-size: var(--font-size--2, 0.76rem); line-height: 1.5; list-style: none; }
+.log { margin-block: var(--size--1) var(--size-2); padding: 0; font-family: var(--font-mono); font-size: var(--font-size--2, 0.76rem); line-height: 1.5; list-style: none; }
 .log li, .log details, .log summary, .log pre { margin: 0; padding: 0; border: 0; border-radius: 0; background: none; font: inherit; }
 .log summary::-webkit-details-marker { display: none; }
 
