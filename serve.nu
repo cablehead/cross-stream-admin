@@ -72,6 +72,19 @@ def valid-label [label: string] {
   ($label =~ '^[a-z0-9][a-z0-9-]{0,31}$') and ($label not-in ["admin" "www" "placeholder" "git"])
 }
 
+# The VM's own units, reachable as labels. They are not sites -- no push token, no repo, nothing
+# to deploy -- but they run and they log, and being unable to read the admin's own log while
+# standing in the admin is a silly place to be. Everything about them is read-only.
+const BUILTIN = {
+  admin: {unit: "admin.service", note: "this app"}
+  git: {unit: "git-host.service", note: "the push gateway"}
+  www: {unit: "site@placeholder", note: "the bare-domain placeholder"}
+}
+def builtin? [label: string] { $label in ($BUILTIN | columns) }
+def unit-for [label: string] { $BUILTIN | get -o $label | get -o unit | default $"site@($label)" }
+# a label we will show a log for: a real site, or one of the VM's own units
+def log-label [label: string] { (valid-label $label) or (builtin? $label) }
+
 def load-session [req: record, ss: record] {
   let hash = (cookie $req "session")
   if ($hash | is-empty) { null } else {
@@ -130,7 +143,8 @@ def admin-page [user: string, cfg: record, reg: list] {
   let sites = ([
     ...(site-records $reg $cfg.tenant)
     {label: "www", host: $"www.($cfg.tenant).cross.stream", state: $www_state, manage: null, note: "builtin placeholder"}
-    {label: "admin", host: $"admin.($cfg.tenant).cross.stream", state: (unit-state "admin.service"), manage: null, note: "builtin"}
+    {label: "git", host: $"git.($cfg.tenant).cross.stream", state: (unit-state "git-host.service"), manage: null, note: "builtin push gateway"}
+    {label: "admin", host: $"admin.($cfg.tenant).cross.stream", state: (unit-state "admin.service"), manage: null, note: "builtin, this app"}
   ])
   {tenant: $cfg.tenant, user: $user, sites: $sites} | .mj $"($TPL)/dashboard.html"
 }
@@ -147,16 +161,32 @@ def site-flags [label: string] {
 # whole mechanism for "keep my tab when I switch site" -- the tab is in the URL, so an ordinary
 # anchor carries it. No state, no script, and the back button behaves.
 def site-nav [label: string, tab: string, reg: list] {
-  $reg | each {|d| {
+  let sites = ($reg | each {|d| {label: $d.label, unit: false}})
+  # the VM's own units sit under the sites: same list, always the log tab, since that is all
+  # they have
+  let units = ($BUILTIN | columns | each {|b| {label: $b, unit: true}})
+  $sites | append $units | each {|d| {
     label: $d.label
-    href: (if $tab == "logs" { $"/s/($d.label)/logs" } else { $"/s/($d.label)" })
+    href: (if ($tab == "logs") or $d.unit { $"/s/($d.label)/logs" } else { $"/s/($d.label)" })
     current: ($d.label == $label)
+    unit: $d.unit
   }}
 }
 
 # A site's own page. Two tabs over one template: `detail` (push commands, features, restart) and
 # `logs` (the live tail). Also the create-landing -- create redirects to the detail tab.
 def site-page [label: string, user: string, cfg: record, tab: string] {
+  if (builtin? $label) {
+    # a unit has one tab, because a unit has one thing to show
+    {
+      tenant: $cfg.tenant, user: $user, label: $label
+      host: $"($label).($cfg.tenant).cross.stream"
+      state: (unit-state (unit-for $label))
+      tab: "logs", unit: ($BUILTIN | get $label | get note)
+      nav: (site-nav $label "logs" (load-registry))
+      datastar_js: $DATASTAR_JS_PATH, log_cap: $LOG_CAP
+    } | .mj $"($TPL)/site.html"
+  } else {
   let token = (token-for $label)
   if ($token == null) {
     resp $"no such site: ($label)" 404 {}
@@ -176,6 +206,7 @@ def site-page [label: string, user: string, cfg: record, tab: string] {
       $base | merge {commands: (push-commands $remote)} | merge (site-flags $label)
     })
     $page | .mj $"($TPL)/site.html"
+  }
   }
 }
 
@@ -397,13 +428,14 @@ def live-events [i: int, e: record] {
 }
 
 def logs-stream [label: string] {
+  let unit = (unit-for $label)
   # Backlog first, held and sent as ONE patch rather than dribbled out a row at a time. This is
   # the threshold-gate shape from http-nu's examples (examples/quotes/serve.nu) without needing
   # the gate: an xs stream marks the replay/live boundary with an `xs.threshold` frame, and
   # journald has no such marker -- but every entry carries a `__CURSOR`, so reading the backlog
   # to completion and then following `--after-cursor` from its last one draws the boundary
   # exactly, with no gap and no line delivered twice.
-  let backlog = (^journalctl -u $"site@($label)" -o json -n $LOG_TAIL --no-pager | complete | get stdout | lines
+  let backlog = (^journalctl -u $unit -o json -n $LOG_TAIL --no-pager | complete | get stdout | lines
     | each {|l| try { $l | from json } catch { null } } | where {|e| $e != null })
   let cursor = ($backlog | last | get -o __CURSOR | default "")
   # `inner` both seeds and clears: each read re-renders the backlog, and without replacing the
@@ -418,7 +450,7 @@ def logs-stream [label: string] {
   # life bounds that to one window, and Datastar's own retry reconnects.
   # (`timeout` is coreutils, from the agnostic base image, not the customerenv layer.)
   let base = ($backlog | length)
-  (^timeout $"($LOG_WINDOW)" journalctl -u $"site@($label)" -o json -f --after-cursor $cursor
+  (^timeout $"($LOG_WINDOW)" journalctl -u $unit -o json -f --after-cursor $cursor
   | lines
   | enumerate
   | each {|it|
@@ -459,7 +491,7 @@ def do-restart [label: string] {
         if ($sess | is-empty) { resp "" 302 {Location: "/"} } else {
           let parts = ($req.path | str replace --regex '^/s/' '' | split row '/' | where {|p| $p != ""})
           let label = ($parts | get -o 0 | default "")
-          if not (valid-label $label) { resp "bad label" 400 {} } else {
+          if not (log-label $label) { resp "bad label" 400 {} } else {
             match ($parts | skip 1) {
               [] => { site-page $label (who-of $sess) $cfg "detail" }
               ["logs"] => { site-page $label (who-of $sess) $cfg "logs" }

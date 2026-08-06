@@ -7,7 +7,7 @@
   <h2>Sites</h2>
   <ul>
   {% for s in nav %}
-    <li><a href="{{ s.href | safe }}"{% if s.current %} aria-current=page{% endif %}>{{ s.label }}</a></li>
+    <li{% if s.unit %} class=unit{% endif %}><a href="{{ s.href | safe }}"{% if s.current %} aria-current=page{% endif %}>{{ s.label }}</a></li>
   {% endfor %}
   </ul>
   <p><small><a href="/">all sites &amp; new</a></small></p>
@@ -17,14 +17,17 @@
 <h1>{{ label }}</h1>
 <p><a href="https://{{ host }}/">{{ host }} &rarr;</a> &middot; {{ state }}</p>
 
+{% if not unit %}
 <nav class=tabs>
   <a href="/s/{{ label }}"{% if tab == "detail" %} aria-current=page{% endif %}>detail</a>
   <a href="/s/{{ label }}/logs"{% if tab == "logs" %} aria-current=page{% endif %}>logs</a>
 </nav>
+{% endif %}
 
 {% if tab == "logs" %}
-<p class=lede>Newest first, one line per request; click one for its payloads. The last
-{{ log_cap }} lines of <code>journalctl -u site@{{ label }}</code>, held in the page only.</p>
+<p class=lede>{% if unit %}{{ unit }} &mdash; a unit of this VM, not a site. {% endif %}Newest
+first, one line per request; click one for its payloads. The last {{ log_cap }} lines, held in
+the page only.</p>
 <ol class=log id=loglines data-init="@get('/s/{{ label }}/logs/stream', {openWhenHidden: true})"></ol>
 <script type=module src="{{ datastar_js | safe }}"></script>
 

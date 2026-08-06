@@ -9,7 +9,7 @@
     <tr>
       <td><a href="https://{{ s.host }}/">{{ s.label }}</a>{% if s.note %} <small>{{ s.note }}</small>{% endif %}</td>
       <td>{{ s.state }}</td>
-      <td>{% if s.manage %}<a href="{{ s.manage | safe }}">detail</a> <a href="{{ s.manage | safe }}/logs">logs</a>{% endif %}</td>
+      <td>{% if s.manage %}<a href="{{ s.manage | safe }}">detail</a> {% endif %}<a href="/s/{{ s.label }}/logs">logs</a></td>
     </tr>
   {% endfor %}
   </tbody>

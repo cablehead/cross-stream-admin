@@ -55,6 +55,9 @@ figure button[data-copy].copied svg:last-child { display: inline; }
 .toc h2 { font-size: var(--font-size--1); text-transform: uppercase; letter-spacing: 0.06em; color: var(--neutral-8); margin-bottom: var(--size--1); }
 .toc ul { list-style: none; margin: 0; padding: 0; }
 .toc li { margin-block: var(--size--2); }
+/* the VM's own units, listed under the sites */
+.toc li.unit:first-of-type { margin-top: var(--size-1); }
+.toc li.unit a { color: var(--neutral-7); }
 .toc a { text-decoration: none; }
 .toc a[aria-current] { font-weight: 700; }
 
