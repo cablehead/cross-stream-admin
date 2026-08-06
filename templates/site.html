@@ -27,7 +27,7 @@
 
 <h2>Writing your site</h2>
 <p>The <a href="/docs">site guide</a> covers what to expect: which paths survive a deploy and which are wiped, where a SQLite file belongs, the manifest keys in full, and what to build against if you want to commit a static binary.</p>
-<p><small>Short version: the repo directory is rebuilt on every push, so keep anything you care about in <code>$env.SITE_STATE</code>.</small></p>
+<p><small>Short version: the repo directory is rebuilt on every push, so keep anything you care about in <code>$env.CROSS_STREAM_SITE_STATE</code>.</small></p>
 
 <h2>Log</h2>
 <p><small>Live, from <code>journalctl -u site@{{ label }}</code>. Newest at the bottom; the last
