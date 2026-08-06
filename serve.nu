@@ -314,10 +314,15 @@ def row-note [i: int, ts: string, v: any, raw: string] {
     "stopping" => $"($v.inflight? | default 0) in flight"
     "stopped" => ""
     "error" => (($v.error? | default "" | lines | where {|l| ($l | str trim) != ""} | get -o 0 | default "") | str trim)
+    # a site's own `print`. http-nu routes it into the log as its own event, with the text in
+    # `content` -- there is no request_id on it (or on `error`), so neither can be folded into
+    # the request that provoked it; they land on their own line, next to it in time.
+    "print" => ($v.content? | default "" | str replace --all "\n" " ")
     "response" => $"($v.status? | default '?') in ($v.latency_ms? | default '?')ms, request not in window"
     "complete" => $"(log-bytes ($v.bytes? | default 0)) in ($v.duration_ms? | default '?')ms, request not in window"
     "" => $raw
-    _ => ($v | columns | str join " ")
+    # an http-nu event we do not have a line for yet: show what it carries, not its field names
+    _ => ($v | reject -o stamp message | transpose k v | each {|r| $"($r.k)=($r.v)" } | str join " ")
   })
   let tag = (if ($kind | is-empty) { "log" } else { $kind })
   if $v == null {
