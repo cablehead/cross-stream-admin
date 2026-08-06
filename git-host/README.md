@@ -28,10 +28,17 @@ Each bare repo carries two hooks, installed by cross-stream-admin's "create site
 
 - `pre-receive` validates an optional `cross-stream.nuon` in the pushed tree and rejects a
   garbled one before the ref moves. `validate-manifest.nu` is the checker.
-- `post-receive` materializes the pushed tree into `/home/app/sites/<label>/repo` with
-  `git archive | tar` (not `git checkout` as root, which would leave root-owned reflog and index
-  files and break the next push), translates the manifest into http-nu flags written to the
-  site's `env`, ensures `state/` exists, then runs `systemctl enable` + `systemctl restart site@<label>` (enable so it survives a reboot).
+- `post-receive` streams the pushed tree through `git archive` (not `git checkout` as root,
+  which would leave root-owned reflog and index files and break the next push) into
+  **`ce-site-deploy`**, one privileged call that does all the root work: rebuild
+  `/home/app/sites/<label>/repo`, translate the manifest into http-nu flags in the site's `env`,
+  ensure `state/` (and `store/` when opted in), then `systemctl enable` + `restart site@<label>`
+  (enable so it survives a reboot).
+
+  It is one script because it was nine `sudo` calls, and **every sudo session writes three pam
+  lines to the journal** -- so a push logged about thirty lines of session bookkeeping around
+  nine lines of work, and `journalctl -u git-host` was unreadable. `ce-site-deploy` re-validates
+  the label rather than trusting the caller: it runs as root off a stdin stream.
 
 ### Shared hooks, not per-repo copies
 
