@@ -239,6 +239,86 @@ def do-create [label: string, reg: list, tenant: string] {
 # `{__html:}`, `.md`, or `.highlight` (all of which mean "already sanitized"), and never put one
 # in a data-* attribute -- those are Datastar expressions, evaluated, so escaping doesn't cover
 # them.
+# --- log rows -----------------------------------------------------------------------------
+# The shapes a site's journal actually holds, counted over 1422 lines across ndyg's five sites:
+#
+#   http-nu jsonl        request / response / complete  (three per request, ~78% of all lines)
+#                        started, stopping, stopped, error
+#   systemd              "Started site@x.service - ...", "Stopped ...", "Deactivated
+#                        successfully.", "Consumed 13.561s CPU time."
+#   raw                  panics and their `note:` trailer
+#
+# Only the first group is JSON, and only it gets an expander. Everything else is shown verbatim
+# because there is nothing more to show.
+
+# Gate on a leading `{` rather than just trying `from json`: nushell's parser is lenient enough
+# to read `site@cube.service: Deactivated successfully.` as a one-field record, so parsing
+# everything would dress systemd's own prose up as structured data.
+def log-parse [raw: string] {
+  if not ($raw | str starts-with "{") { null } else {
+    let v = (try { $raw | from json } catch { null })
+    if (($v | describe) | str starts-with "record") { $v } else { null }
+  }
+}
+
+def log-bytes [n: int] {
+  if $n < 1024 { $"($n) B" } else if $n < 1048576 { $"(($n / 1024 * 10 | math round) / 10) kB" } else { $"(($n / 1048576 * 10 | math round) / 10) MB" }
+}
+
+# The terse line, one per shape. Kept to a tag plus the few fields you actually scan for; the
+# rest is one click away.
+def log-terse [v: record] {
+  let kind = ($v | get -o message | default "")
+  match $kind {
+    "request" => [
+      (SPAN {class: "tag req"} "req")
+      (SPAN {class: "msg"} $"($v.method? | default '?') ($v.path? | default '')")
+      (SPAN {class: "dim"} ($v.trusted_ip? | default ""))
+    ]
+    "response" => [
+      (SPAN {class: $"tag res s(($v.status? | default 0) // 100)"} ($v.status? | default "?" | into string))
+      (SPAN {class: "dim"} $"($v.latency_ms? | default '?') ms to first byte")
+    ]
+    "complete" => [
+      (SPAN {class: "tag done"} "done")
+      (SPAN {class: "dim"} $"(log-bytes ($v.bytes? | default 0)) in ($v.duration_ms? | default '?') ms")
+    ]
+    "started" => [
+      (SPAN {class: "tag life"} "started")
+      (SPAN {class: "msg"} ($v.address? | default ""))
+      (SPAN {class: "dim"} $"nu ($v.nu_version? | default '?') · up in ($v.startup_ms? | default '?') ms")
+    ]
+    "stopping" => [(SPAN {class: "tag life"} "stopping") (SPAN {class: "dim"} $"($v.inflight? | default 0) in flight")]
+    "stopped" => [(SPAN {class: "tag life"} "stopped")]
+    "error" => [
+      (SPAN {class: "tag err"} "error")
+      # a nushell error is a rendered block; its first non-empty line is the headline
+      (SPAN {class: "msg"} (($v.error? | default "" | lines | where {|l| ($l | str trim) != ""} | get -o 0 | default "") | str trim))
+    ]
+    _ => [
+      (SPAN {class: "tag"} (if ($kind | is-empty) { "json" } else { $kind }))
+      (SPAN {class: "dim"} ($v | columns | str join " "))
+    ]
+  }
+}
+
+# What the expander shows. Pretty JSON, except for an error, whose payload is already a
+# rendered multi-line block -- as JSON it would be one line of escaped \n.
+def log-detail [v: record] {
+  if ($v | get -o message) == "error" { $v.error? | default "" } else { $v | to json --indent 2 }
+}
+
+def log-row [id: string, ts: string, raw: string] {
+  let v = (log-parse $raw)
+  if $v == null {
+    LI {id: $id class: "logline plain"} (SPAN {class: "ts"} $ts) (SPAN {class: "msg"} $raw)
+  } else {
+    LI {id: $id class: "logline"} (
+      DETAILS (SUMMARY (SPAN {class: "ts"} $ts) (log-terse $v)) (PRE (log-detail $v))
+    )
+  }
+}
+
 def logs-stream [label: string] {
   # `timeout` is load-bearing, not a safety belt. http-nu does not reap the child when the
   # browser goes away: measured on 0.17.2, a bare `journalctl -f` stayed a live child of the
@@ -257,9 +337,10 @@ def logs-stream [label: string] {
       let ts = (try { ($e.__REALTIME_TIMESTAMP | into int) * 1000 | into datetime | format date "%H:%M:%S" } catch { "" })
       # MESSAGE comes back as a byte list when the line isn't valid UTF-8; show it either way
       let msg = (if ($e.MESSAGE? | describe) == "string" { $e.MESSAGE } else { $e.MESSAGE? | default "" | to json -r })
-      let row = (LI {id: $"log-($it.index)" class: "logline"} (SPAN {class: "ts"} $ts) (SPAN {class: "msg"} $msg)
-        | to datastar-patch-elements --selector "#loglines" --mode append)
-      # bounded panel: drop the row that just fell out of the window
+      # newest first: prepend, so the top of the panel is the live edge and you never chase it
+      let row = (log-row $"log-($it.index)" $ts $msg
+        | to datastar-patch-elements --selector "#loglines" --mode prepend)
+      # bounded panel: drop the row that just fell out of the window -- oldest, so bottom now
       if $it.index >= $LOG_CAP {
         [$row ("" | to datastar-patch-elements --selector $"#log-($it.index - $LOG_CAP)" --mode remove)]
       } else {
