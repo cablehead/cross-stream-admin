@@ -71,27 +71,40 @@ figure button[data-copy].copied svg:last-child { display: inline; }
 .log li, .log details, .log summary, .log pre { margin: 0; padding: 0; border: 0; border-radius: 0; background: none; font: inherit; }
 .log summary::-webkit-details-marker { display: none; }
 
-/* every line is the same six columns; a note's text runs across the last four */
-.log > li, .log summary { display: grid; grid-template-columns: 4.4em 2.6em minmax(0, 1fr) 2.4em 3.2em 3.4em; gap: 0 var(--size--1); align-items: baseline; padding: 0 var(--size--1); }
-.log summary { grid-column: 1 / -1; cursor: pointer; }
+/* Every line is the same columns, and the line is whatever element is clickable: a <summary>,
+   or the row itself when there is nothing to expand. <details> sits between them and would
+   otherwise be the row's only child -- display:contents takes it out of the layout so the
+   summary is the full-width line. The path column takes the slack, so the timestamp is flush
+   left and the last column flush right whatever the width. */
+.log details { display: contents; }
+.log summary, .log > li:not(:has(details)) { display: grid; grid-template-columns: 4.6em 5em minmax(0, 1fr); gap: 0 var(--size--1); align-items: baseline; padding: 0 var(--size--1); }
+.log summary { cursor: pointer; }
+/* a request line is the one that has a status, and it carries three more columns. The widths
+   are fixed rather than max-content because every row is its own grid: only equal tracks line
+   the columns up down the page. */
+/* the shared first three tracks are identical to the note line above, so the path column
+   and a note's text start at the same x all the way down */
+.log summary:has(data) { grid-template-columns: 4.6em 5em minmax(0, 1fr) 2.6em 3.6em 4em; }
 .log li:nth-child(even) { background: var(--neutral-2); }
 .log li:hover { background: var(--neutral-3); }
-.log span { grid-column: 3 / -1; }
+
 .log time { color: var(--neutral-7); font-variant-numeric: tabular-nums; }
-.log code, .log span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* only the cells clip to one line -- `.log span` would also catch every span .highlight emits
+   inside a payload, which is what stopped the JSON wrapping */
+.log code, .log summary > span, .log > li > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .log code { background: none; padding: 0; }
 .log data, .log small { text-align: right; font-variant-numeric: tabular-nums; }
 .log small { color: var(--neutral-7); }
 
 /* the one column worth colouring: 2xx is the quiet case, the rest earn attention */
-.log data { font-weight: var(--font-weight-semi-bold); }
+.log data { font-weight: var(--font-weight-normal, 400); }
 .log data[value^="2"] { color: var(--primary-7); }
 .log data[value^="3"] { color: var(--neutral-7); }
-.log data[value^="4"] { color: var(--tertiary-7); }
-.log data[value^="5"] { color: var(--error-8); }
+.log data[value^="4"] { color: var(--tertiary-7); font-weight: var(--font-weight-semi-bold); }
+.log data[value^="5"] { color: var(--error-8); font-weight: var(--font-weight-bold, 700); }
 
 /* payloads stack under their row, tied to it by one rule */
-.log pre { grid-column: 1 / -1; margin: var(--size--2) 0 var(--size--1) 5.4em; padding-left: var(--size--1); border-left: var(--border-width-1) solid var(--neutral-4); white-space: pre-wrap; overflow-wrap: anywhere; }
+.log pre { margin: var(--size--2) 0 var(--size--1) 5.4em; padding-left: var(--size--1); border-left: var(--border-width-1) solid var(--neutral-4); white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 55rem) {
   .log > li, .log summary { grid-template-columns: 4.4em 2.6em minmax(0, 1fr) 2.4em 3.2em; }
   .log small:last-of-type { display: none; }
