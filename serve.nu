@@ -321,7 +321,9 @@ def row-note [i: int, ts: string, v: any, raw: string] {
   let tag = (if ($kind | is-empty) { "log" } else { $kind })
   let cls = (match $kind { "error" => "logline note err", "" => "logline note", _ => "logline note life" })
   if $v == null {
-    LI {id: $"log-($i)" class: $cls} (SPAN {class: "ts"} $ts) (SPAN {class: "tag"} $tag) (SPAN {class: "note"} $text)
+    # no expander: a systemd line or a panic has nothing behind it. `plain` is what carries the
+    # column grid, since there is no <summary> here to put it on.
+    LI {id: $"log-($i)" class: $"($cls) plain"} (SPAN {class: "ts"} $ts) (SPAN {class: "tag"} $tag) (SPAN {class: "note"} $text)
   } else {
     # an error's payload is already a rendered block; as JSON it is one line of escaped \n
     let body = (if $kind == "error" { PRE ($v.error? | default "") } else { log-payload $v })

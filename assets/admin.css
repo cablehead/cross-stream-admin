@@ -62,35 +62,47 @@ figure button[data-copy].copied svg:last-child { display: inline; }
 .tabs a { text-decoration: none; padding: var(--size--2) 0; margin-bottom: -1px; border-bottom: 2px solid transparent; }
 .tabs a[aria-current] { border-bottom-color: currentColor; font-weight: 700; }
 
-/* the live log panel: one line per request, apache-ish columns, newest at the top. Dense on
-   purpose -- the point is to scan a screenful, not to read one entry. */
-.logs { overflow-y: auto; max-height: 70vh; margin-block: var(--size-1); padding: var(--size--2) 0; background: var(--code-bg); border: var(--border-width-1) solid var(--neutral-4); border-radius: var(--border-radius-1); }
+/* the live log panel: a spreadsheet, not a document. Hairline rules, zebra rows, no radii or
+   nested boxes, and the only colour is the status code -- which is the one column you scan for.
+   Stellar has no green or amber, so the status ramp is defined here, in both themes. */
+:root { --log-2xx: #2f7d4f; --log-3xx: #5f7183; --log-4xx: #9a6100; --log-5xx: var(--error-7); --log-zebra: #00000006; }
+.dark { --log-2xx: #71c191; --log-3xx: #93a3b8; --log-4xx: #d8a44e; --log-5xx: var(--error-8); --log-zebra: #ffffff08; }
+
+.logs { overflow-y: auto; max-height: 70vh; margin-block: var(--size-1); border-block: var(--border-width-1) solid var(--neutral-4); }
 .logs ol { margin: 0; padding: 0; list-style: none; }
-.logline { font-family: var(--font-mono); font-size: var(--font-size--2, 0.78rem); line-height: 1.45; }
-.logline > details > summary, .logline.note:not(:has(details)) { list-style: none; }
+.logline { font-family: var(--font-mono); font-size: var(--font-size--2, 0.76rem); line-height: 1.5; }
+.logline:nth-child(even) { background: var(--log-zebra); }
+.logline:hover { background: var(--neutral-3); }
 .logline summary::-webkit-details-marker { display: none; }
+.logline summary { list-style: none; }
 
-/* the columns. A request row fills all of them; a note row spans from the tag across. */
-.logline summary, .logline.note { display: grid; grid-template-columns: 4.6em 2.8em minmax(0, 1fr) 2.4em 3.4em 3.6em; gap: 0 0.7em; align-items: baseline; padding: 0 var(--size--1); cursor: pointer; }
-.logline.note summary, .logline.note > .ts { cursor: pointer; }
-.logline.note summary { grid-template-columns: 4.6em 5.4em minmax(0, 1fr); }
-.logline:hover { background: var(--neutral-2); }
+/* one grid, on whatever the clickable line is: a <summary>, or the row itself when there is
+   nothing to expand */
+.logline summary, .logline.plain { display: grid; grid-template-columns: 4.4em 2.6em minmax(0, 1fr) 2.2em 3.2em 3.4em; gap: 0 0.6em; align-items: baseline; padding: 0 0.5em; cursor: pointer; }
+.logline.plain { cursor: default; }
+.logline.note summary, .logline.note.plain { grid-template-columns: 4.4em 5em minmax(0, 1fr); }
 
-.logline .ts { color: var(--neutral-8); font-variant-numeric: tabular-nums; }
-.logline .verb { font-weight: 700; }
+.logline .ts { color: var(--neutral-7); font-variant-numeric: tabular-nums; }
+.logline .verb { color: var(--neutral-8); }
 .logline .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .logline .status, .logline .size, .logline .dur { text-align: right; font-variant-numeric: tabular-nums; }
-.logline .status.s4, .logline .status.s5 { color: var(--danger-7, crimson); font-weight: 700; }
-.logline .pending { color: var(--neutral-6); }
-.logline .tag { color: var(--neutral-8); text-transform: uppercase; letter-spacing: 0.04em; }
+.logline .size, .logline .dur { color: var(--neutral-7); }
+.logline .status { font-weight: 700; }
+.logline .status.s2 { color: var(--log-2xx); }
+.logline .status.s3 { color: var(--log-3xx); }
+.logline .status.s4 { color: var(--log-4xx); }
+.logline .status.s5 { color: var(--log-5xx); }
+.logline .pending { color: var(--neutral-6); font-weight: 400; }
+.logline .tag { color: var(--neutral-7); text-transform: uppercase; letter-spacing: 0.04em; }
 .logline .note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.logline.err .tag, .logline.err .note { color: var(--danger-7, crimson); }
-.logline.life .tag { font-weight: 700; }
+.logline.err .tag, .logline.err .note { color: var(--log-5xx); }
+.logline.life .tag { color: var(--neutral-8); font-weight: 700; }
 
-/* payloads stack under their row as the request's events land */
-.logline .payloads { padding: var(--size--2) var(--size--1) var(--size--1) 5.3em; }
-.logline .payloads pre { margin: 0 0 var(--size--2) 0; padding: var(--size--1); background: var(--neutral-2); border-radius: var(--border-radius-1); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* payloads: indented under their row, one hairline to tie them to it, nothing else */
+.logline .payloads { padding: 0.2em 0.5em 0.5em 5.6em; }
+.logline .payloads pre { margin: 0; padding: 0.2em 0 0.2em 0.7em; background: none; border-left: var(--border-width-1) solid var(--neutral-4); white-space: pre-wrap; overflow-wrap: anywhere; }
+.logline .payloads pre + pre { margin-top: 0.3em; }
 @media (max-width: 55rem) {
-  .logline summary { grid-template-columns: 4.6em 2.8em minmax(0, 1fr) 2.4em 3.4em; }
+  .logline summary { grid-template-columns: 4.4em 2.6em minmax(0, 1fr) 2.2em 3.2em; }
   .logline .dur { display: none; }
 }
