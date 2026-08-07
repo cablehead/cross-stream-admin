@@ -14,9 +14,14 @@ const TOKENS = "/home/app/git/tokens.json"
 const SOCK = "/home/app/git/store/sock"
 const TOPIC = "site.token"
 
+# Returns null if the store could not be read. That distinction is the whole point: an
+# unreadable store must NOT look like an empty one. It did once, and the cost was every key
+# on the tenant appended a second time -- the socket file survives a git-host restart, so a
+# `[ -S sock ]` check passed against a stale socket before the new process had bound, the
+# read failed, and "no hashes found" was taken to mean "nothing migrated yet".
 def store-hashes [] {
-  let r = (^curl -s --unix-socket $SOCK $"http://localhost/?topic=($TOPIC)" | complete)
-  if $r.exit_code != 0 { [] } else {
+  let r = (^curl -s --fail --unix-socket $SOCK $"http://localhost/?topic=($TOPIC)" | complete)
+  if $r.exit_code != 0 { null } else {
     $r.stdout | lines
       | where {|l| ($l | str trim | is-not-empty) }
       | each {|l| try { ($l | from json).meta?.hash? } catch { null } }
@@ -24,12 +29,31 @@ def store-hashes [] {
   }
 }
 
+# Wait for the store to answer, not for its socket file to exist.
+def wait-for-store [] {
+  mut ok = false
+  for _ in 1..30 {
+    if (^curl -s --fail --max-time 2 --unix-socket $SOCK "http://localhost/?limit=1" | complete).exit_code == 0 {
+      $ok = true
+      break
+    }
+    sleep 1sec
+  }
+  $ok
+}
+
 def main [] {
   if not ($TOKENS | path exists) {
     print "no tokens.json: nothing to migrate"
     return
   }
+  if not (wait-for-store) {
+    error make {msg: $"key store did not answer on ($SOCK); refusing to migrate"}
+  }
   let have = (store-hashes)
+  if $have == null {
+    error make {msg: "could not read the key store; refusing to migrate (an unreadable store is not an empty one)"}
+  }
   let toks = (open --raw $TOKENS | from json)
   let rows = ($toks | transpose secret label)
   mut added = 0
