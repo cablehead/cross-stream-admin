@@ -21,7 +21,10 @@
 
 <article>
 <h1>{{ label }}</h1>
-<p><a href="https://{{ host }}/">{{ host }} &rarr;</a> &middot; {{ state }}</p>
+{# The site itself, from the top of both tabs. New tab on purpose: you open it to look at
+   what you just deployed, and losing the admin page to do that is the wrong trade. Units
+   (admin, git, www) are not sites you visit, so they keep the plain hostname. #}
+<p>{% if unit %}{{ host }}{% else %}<a href="https://{{ host }}/" target=_blank rel=noopener>view site &nearr;</a> <small>{{ host }}</small>{% endif %} &middot; {{ state }}</p>
 
 {% if not unit %}
 <nav>
@@ -40,14 +43,23 @@ the page only.</small></p>
 {% else %}
 {% if new_key %}
 <h2>Push to deploy</h2>
-<p>From your project (it needs a <code>serve.nu</code> at its root), run:</p>
+<p><strong>Copy one of these now.</strong> <small>The key in the URL is shown this once and is
+not recoverable: only its hash is kept, so nobody, including this page, can read it back. Lose
+it and you add a new key below.</small></p>
+
+<p><small>A project that has never pushed here (it needs a <code>serve.nu</code> at its
+root):</small></p>
 <figure>
   <button type=button data-copy title="Copy" aria-label="Copy to clipboard"><svg width=15 height=15 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=9 y=9 width=13 height=13 rx=2></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg width=15 height=15 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M20 6 9 17l-5-5"></path></svg></button>
   {{ commands | safe }}
 </figure>
-<p><strong>Copy that now.</strong> <small>The key in the URL is shown this once and is not
-recoverable: only its hash is kept, so nobody, including this page, can read it back. Lose it
-and you add a new key below. Each push redeploys.</small></p>
+
+<p><small>A project that already pushes here, swapping to this key:</small></p>
+<figure>
+  <button type=button data-copy title="Copy" aria-label="Copy to clipboard"><svg width=15 height=15 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=9 y=9 width=13 height=13 rx=2></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg width=15 height=15 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M20 6 9 17l-5-5"></path></svg></button>
+  {{ seturl | safe }}
+</figure>
+<p><small>Once that pushes, delete the key it replaced. Each push redeploys.</small></p>
 {% endif %}
 
 <h2>Push keys</h2>

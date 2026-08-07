@@ -171,9 +171,17 @@ def serve-file [dir: string, prefix: string, path: string, ct: string] {
   }
 }
 
-# The two git commands, syntax-highlighted by `.md` (one <pre><code>, no wrapper).
+# The git commands, syntax-highlighted by `.md` (one <pre><code>, no wrapper). Two of them,
+# because a key is handed out in two different situations: a project that has never pushed
+# here needs a remote, and a project that is swapping a key already has one. `remote add`
+# fails with "remote cross-stream already exists" in the second case, which is a confusing
+# thing to hit while you are holding a secret you cannot get shown again.
 def push-commands [remote: string] {
   $"```bash\ngit remote add cross-stream ($remote)\ngit push -u cross-stream main\n```" | .md | get __html
+}
+
+def seturl-commands [remote: string] {
+  $"```bash\ngit remote set-url cross-stream ($remote)\n```" | .md | get __html
 }
 
 # Rows for the dashboard table, as records the template loops over.
@@ -263,7 +271,8 @@ def site-page [label: string, user: string, cfg: record, tab: string, new_key: s
       # it can be shown: what we keep is a hash.
       $base | merge {keys: (keys-for $label), new_key: $new_key} | merge (site-flags $label)
         | merge (if ($new_key | is-empty) { {} } else {
-            {commands: (push-commands (push-remote $new_key $cfg.tenant $label))}
+            let remote = (push-remote $new_key $cfg.tenant $label)
+            {commands: (push-commands $remote), seturl: (seturl-commands $remote)}
           })
     })
     $page | .mj $"($TPL)/site.html"
