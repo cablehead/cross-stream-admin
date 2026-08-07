@@ -38,13 +38,49 @@ the page only.</small></p>
 <script type=module src="{{ datastar_js | safe }}"></script>
 
 {% else %}
+{% if new_key %}
 <h2>Push to deploy</h2>
 <p>From your project (it needs a <code>serve.nu</code> at its root), run:</p>
 <figure>
   <button type=button data-copy title="Copy" aria-label="Copy to clipboard"><svg width=15 height=15 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=9 y=9 width=13 height=13 rx=2></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg width=15 height=15 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M20 6 9 17l-5-5"></path></svg></button>
   {{ commands | safe }}
 </figure>
-<p><small>The token in that URL is this site's push credential, keep it private. Each push redeploys.</small></p>
+<p><strong>Copy that now.</strong> <small>The key in the URL is shown this once and is not
+recoverable: only its hash is kept, so nobody, including this page, can read it back. Lose it
+and you add a new key below. Each push redeploys.</small></p>
+{% endif %}
+
+<h2>Push keys</h2>
+{% if keys %}
+<table>
+  <thead><tr><th>name</th><th>ends</th><th>added</th><th></th></tr></thead>
+  <tbody>
+  {% for k in keys %}
+    <tr>
+      <td>{{ k.name }}</td>
+      <td><code>&hellip;{{ k.suffix }}</code></td>
+      <td>{{ k.created }}</td>
+      <td><form method=post action=/keys/delete>
+        <input type=hidden name=label value="{{ label }}">
+        <input type=hidden name=id value="{{ k.id }}">
+        <button>delete</button>
+      </form></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p><small>No keys. This site cannot be pushed to until you add one.</small></p>
+{% endif %}
+
+<form method=post action=/keys/create>
+  <input type=hidden name=label value="{{ label }}">
+  <input name=name placeholder="laptop" aria-label="key name" required>
+  <button>add key</button>
+</form>
+<p><small>Every key can push to this site and no other. Name them for where they live, so the
+last few characters tell you which is which. To roll one: add a key, switch your remote over,
+then delete the old one. Nothing is down in between, because both work until you remove one.</small></p>
 
 <h2>Features</h2>
 {% if store or services or datastar %}

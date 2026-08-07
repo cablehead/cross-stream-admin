@@ -17,6 +17,13 @@ const REGISTRY = "/home/app/admin/registry.nuon"
 const SITES = "/home/app/sites"
 const GIT_ROOT = "/home/app/git"
 const TOKENS = "/home/app/git/tokens.json"
+# Push keys live in git-host's store, not here. We reach it over the socket http-nu puts in
+# the store directory. That directory is inside /home/app/git (0750 app:app), so no site can
+# reach it, and connecting to a unix socket needs write on it, which only app and root have.
+# This process is root. That filesystem boundary is the entire authentication: there is no
+# shared secret between the admin and git-host, and nothing to rotate or leak.
+const STORE_SOCK = "/home/app/git/store/sock"
+const KEY_TOPIC = "site.token"
 # Canonical location of the deploy hooks -- every bare repo's `core.hooksPath` points here, so
 # editing a hook takes effect on the next push everywhere. Single point of truth: when the layer
 # moves the checkout, this is the only line that changes. (ce-boot-config symlinks this path at
@@ -43,11 +50,58 @@ def verify-token [token: string, cfg: record] {
 def load-cfg [] { if ($CFG | path exists) { open --raw $CFG | from json } else { null } }
 def load-registry [] { if ($REGISTRY | path exists) { open $REGISTRY } else { [] } }
 def load-tokens [] { if ($TOKENS | path exists) { open --raw $TOKENS | from json } else { {} } }
-def save-tokens [t: record] { $t | to json | save --force $TOKENS; ^chown app:app $TOKENS }
 
-def token-for [label: string] {
-  let t = (load-tokens)
-  if ($t | is-empty) { null } else { $t | transpose tok lbl | where lbl == $label | get -o tok.0 }
+# --- push keys, over git-host's store socket -------------------------------------------
+# A key is one frame on `site.token`. Its meta holds label, name, hash, suffix, created --
+# everything except the secret, which is hashed on the way in and never stored. So the admin
+# cannot show you a key after it is minted, only the moment it is made. That is what a
+# credential should do, and it is why there is no "rotate" verb: a label may hold any number
+# of keys, so rolling one is add, deploy, remove.
+
+def store-cat [topic: string] {
+  let r = (^curl -s --unix-socket $STORE_SOCK $"http://localhost/?topic=($topic)" | complete)
+  if $r.exit_code != 0 { [] } else {
+    $r.stdout | lines | where {|l| ($l | str trim | is-not-empty) } | each {|l| try { $l | from json } catch { null } } | where {|f| $f != null }
+  }
+}
+
+def store-append [topic: string, meta: record] {
+  let m = ($meta | to json --raw | encode base64)
+  (^curl -s --unix-socket $STORE_SOCK -X POST --data "" -H $"xs-meta: ($m)"
+    $"http://localhost/append/($topic)?ttl=forever" | complete)
+}
+
+def store-remove [id: string] {
+  (^curl -s --unix-socket $STORE_SOCK -X DELETE $"http://localhost/($id)" | complete)
+}
+
+# Keys for one label, newest first. The id is the frame id, which is what a delete names.
+def keys-for [label: string] {
+  store-cat $KEY_TOPIC
+    | where {|f| ($f.meta?.label? | default "") == $label }
+    | each {|f| {
+        id: $f.id
+        name: ($f.meta?.name? | default "unnamed")
+        suffix: ($f.meta?.suffix? | default "")
+        created: ($f.meta?.created? | default "")
+      } }
+    | sort-by id --reverse
+}
+
+# Mint a key for a label and return the secret. The caller shows it once; we keep the hash.
+def mint-key [label: string, name: string] {
+  let secret = (random chars --length 32)
+  let r = (store-append $KEY_TOPIC {
+    label: $label, name: $name
+    hash: ($secret | hash sha256)
+    suffix: ($secret | str substring (-6..))
+    created: (date now | format date "%Y-%m-%d")
+  })
+  if $r.exit_code != 0 { null } else { $secret }
+}
+
+def push-remote [token: string, tenant: string, label: string] {
+  $"https://($token)@git.($tenant).cross.stream/($label).git"
 }
 
 def cookie [req: record, name: string] {
@@ -175,7 +229,7 @@ def site-nav [label: string, tab: string, reg: list] {
 
 # A site's own page. Two tabs over one template: `detail` (push commands, features, restart) and
 # `logs` (the live tail). Also the create-landing -- create redirects to the detail tab.
-def site-page [label: string, user: string, cfg: record, tab: string] {
+def site-page [label: string, user: string, cfg: record, tab: string, new_key: string = ""] {
   if (builtin? $label) {
     # a unit has one tab, because a unit has one thing to show
     {
@@ -187,8 +241,11 @@ def site-page [label: string, user: string, cfg: record, tab: string] {
       datastar_js: $DATASTAR_JS_PATH, log_cap: $LOG_CAP
     } | .mj $"($TPL)/site.html"
   } else {
-  let token = (token-for $label)
-  if ($token == null) {
+  # Existence is the registry's answer, not the key store's. It used to be "can I find this
+  # label's plaintext token", which stopped working the moment keys were hashed -- and was
+  # always the wrong question, since a site with no key still exists.
+  let reg = (load-registry)
+  if not ($label in ($reg | get -o label | default [])) {
     resp $"no such site: ($label)" 404 {}
   } else {
     let base = {
@@ -196,14 +253,18 @@ def site-page [label: string, user: string, cfg: record, tab: string] {
       host: $"($label).($cfg.tenant).cross.stream"
       state: (unit-state $"site@($label)")
       tab: $tab
-      nav: (site-nav $label $tab (load-registry))
+      nav: (site-nav $label $tab $reg)
     }
     let page = (if $tab == "logs" {
       # served by http-nu itself (admin.service runs with --datastar), not by this handler
       $base | merge {datastar_js: $DATASTAR_JS_PATH, log_cap: $LOG_CAP}
     } else {
-      let remote = $"https://($token)@git.($cfg.tenant).cross.stream/($label).git"
-      $base | merge {commands: (push-commands $remote)} | merge (site-flags $label)
+      # `new_key` is set only on the response that just minted one. There is no other moment
+      # it can be shown: what we keep is a hash.
+      $base | merge {keys: (keys-for $label), new_key: $new_key} | merge (site-flags $label)
+        | merge (if ($new_key | is-empty) { {} } else {
+            {commands: (push-commands (push-remote $new_key $cfg.tenant $label))}
+          })
     })
     $page | .mj $"($TPL)/site.html"
   }
@@ -235,15 +296,17 @@ def screenshots-page [user: string, cfg: record] {
   {tenant: $cfg.tenant, user: $user, count: ($files | length), grid: $grid} | .mj $"($TPL)/screenshots.html"
 }
 
-# Mint a token + bare repo + post-receive hook, register, then land on the site's page.
-def do-create [label: string, reg: list, tenant: string] {
+# Mint a key + bare repo + post-receive hook, register, then render the site's page with the
+# key shown. Rendered, not redirected: a redirect would have to carry the secret in a URL, and
+# a URL is the one place a credential must never be -- browser history, the referer header,
+# and the access log all keep it.
+def do-create [label: string, reg: list, cfg: record, user: string] {
   let bare = $"($GIT_ROOT)/($label).git"
   if ($label in ($reg | get -o label | default [])) {
     resp $"label ($label) already in use, pick another" 409 {}
   } else if ($bare | path exists) {
     resp $"($bare) already exists on disk" 409 {}
   } else {
-    let token = (random chars --length 32)
     let init = (^git init --bare -b main $bare | complete)
     if $init.exit_code != 0 {
       resp $"git init failed: ($init.stderr)" 500 {}
@@ -253,9 +316,13 @@ def do-create [label: string, reg: list, tenant: string] {
       # one canonical copy of the hooks serves every repo -- no per-repo snapshot to go stale
       ^git -C $bare config core.hooksPath $HOOKS_DIR
       ^chown -R app:app $bare
-      save-tokens (load-tokens | insert $token $label)
       $reg | append {label: $label, created: (date now | format date "%Y-%m-%d")} | save --force $REGISTRY
-      resp "" 302 {Location: $"/s/($label)"}
+      let secret = (mint-key $label "initial")
+      if ($secret | is-empty) {
+        resp $"site ($label) created, but the key store did not answer -- add a key from its page" 500 {}
+      } else {
+        site-page $label $user $cfg "detail" $secret
+      }
     }
   }
 }
@@ -533,7 +600,45 @@ def do-restart [label: string] {
           "/create" => {
             if ($sess | is-empty) { resp "unauthorized" 401 {} } else if ($req.method != "POST") { resp "method not allowed" 405 {} } else {
               let label = ((parse-form $body).label? | default "" | str trim)
-              if not (valid-label $label) { resp "invalid label, use a-z 0-9 - (<=32), not a reserved name" 400 {} } else { do-create $label (load-registry) $cfg.tenant }
+              if not (valid-label $label) { resp "invalid label, use a-z 0-9 - (<=32), not a reserved name" 400 {} } else { do-create $label (load-registry) $cfg (who-of $sess) }
+            }
+          }
+          # Add a key to an existing site. Renders the page with the secret rather than
+          # redirecting, for the same reason do-create does: a secret does not belong in a URL.
+          "/keys/create" => {
+            if ($sess | is-empty) { resp "unauthorized" 401 {} } else if ($req.method != "POST") { resp "method not allowed" 405 {} } else {
+              let f = (parse-form $body)
+              let label = ($f.label? | default "" | str trim)
+              let name = ($f.name? | default "" | str trim)
+              let reg = (load-registry)
+              if not ($label in ($reg | get -o label | default [])) {
+                resp "no such site" 404 {}
+              } else if not ($name =~ '^[\w][\w .-]{0,31}$') {
+                resp "name it something, up to 32 of letters, digits, space, dot or dash" 400 {}
+              } else {
+                let secret = (mint-key $label $name)
+                if ($secret | is-empty) { resp "the key store did not answer" 500 {} } else {
+                  site-page $label (who-of $sess) $cfg "detail" $secret
+                }
+              }
+            }
+          }
+          # Remove a key. The frame id is the name of the thing, and nothing secret is in
+          # flight, so this one redirects.
+          "/keys/delete" => {
+            if ($sess | is-empty) { resp "unauthorized" 401 {} } else if ($req.method != "POST") { resp "method not allowed" 405 {} } else {
+              let f = (parse-form $body)
+              let label = ($f.label? | default "" | str trim)
+              let id = ($f.id? | default "" | str trim)
+              if not (valid-label $label) { resp "invalid label" 400 {} } else if not ($id =~ '^[0-9a-z]{25,32}$') {
+                resp "invalid key id" 400 {}
+              } else if not ($id in (keys-for $label | get -o id | default [])) {
+                # a key may only be deleted through the page of the site it belongs to
+                resp "no such key for this site" 404 {}
+              } else {
+                store-remove $id
+                resp "" 302 {Location: $"/s/($label)"}
+              }
             }
           }
           "/restart" => {
