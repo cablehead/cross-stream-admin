@@ -7,11 +7,23 @@ After=ce-boot-config.service
 # root-owned /home/app/sites and restart site@<label>. SupplementaryGroups=sites lets it
 # create /run/sites/git.sock; the dir is setgid sites, so the socket lands as app:sites and
 # the caddy dispatcher (in group sites) can reverse_proxy to it.
+#
+# The paths below are the ones the layer actually installs. They used to read
+# /home/app/git-host, from before the git-host repo was merged into cross-stream-admin, and
+# the layer build rewrote them on the way in. That made this file unusable as-is: installing
+# it verbatim pointed the unit at a directory that no longer exists. It is written out in
+# full here so ce-redeploy-admin can install it the same way it installs admin.service.
+#
+# --store gives this process an embedded xs store, and with it a socket at
+# /home/app/git/store/sock. That socket is how the admin manages push keys: it is inside
+# /home/app/git, which is 0750 app:app, so no site can even reach the directory, and
+# connecting to a unix socket needs write on it, which only app and root have. That
+# filesystem boundary IS the authentication -- there is no token between admin and git-host.
 User=app
 SupplementaryGroups=sites
 UMask=0007
-WorkingDirectory=/home/app/git-host
-ExecStart=/usr/local/bin/http-nu /run/sites/git.sock --log-format jsonl /home/app/git-host/serve.nu
+WorkingDirectory=/home/app/admin/git-host
+ExecStart=/usr/local/bin/http-nu /run/sites/git.sock --log-format jsonl --store /home/app/git/store /home/app/admin/git-host/serve.nu
 Restart=on-failure
 [Install]
 WantedBy=multi-user.target

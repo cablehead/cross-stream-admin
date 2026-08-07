@@ -14,9 +14,37 @@
 const GIT_ROOT = "/home/app/git"
 const BACKEND = "/usr/lib/git-core/git-http-backend"
 const TOKENS = "/home/app/git/tokens.json"
+const KEY_TOPIC = "site.token"
 
-# tokens.json: { "<token>": "<label>", ... }
+# A push key is one frame on `site.token`, appended by the admin over this process's own
+# store socket. Its meta carries everything about the key except the key:
+#   {label, name, hash, suffix, created}
+# `hash` is sha256 of the secret. The secret itself is never written down, so this store,
+# a backup of it, or a screenshot of the admin page cannot be pushed with. A label may have
+# any number of keys, which is what makes rolling one a non-event: add, deploy, remove.
+#
+# The `try` matters. `.cat` only exists when http-nu is run with --store, so a tenant whose
+# unit predates that flag falls back to the legacy map below instead of failing to serve.
+def load-keys [] {
+  try {
+    .cat --topic $KEY_TOPIC
+      | where {|f| ($f.meta?.hash? | default "" | is-not-empty) }
+      | each {|f| {label: $f.meta.label, hash: $f.meta.hash} }
+  } catch { [] }
+}
+
+# tokens.json: { "<token>": "<label>", ... }. The pre-store shape, plaintext and keyed by the
+# secret. Read-only here, and only until every tenant has run migrate-tokens.nu.
 def load-tokens [] { if ($TOKENS | path exists) { open --raw $TOKENS | from json } else { {} } }
+
+# The label a single presented secret may push to, or null. Hashed lookup first, then the
+# legacy plaintext map.
+def label-for-secret [secret: string, keys: list] {
+  if ($secret | is-empty) { null } else {
+    let hit = ($keys | where hash == ($secret | hash sha256) | get -o 0.label)
+    if ($hit | is-not-empty) { $hit } else { (load-tokens) | get -o $secret }
+  }
+}
 
 def resp [body, status: int, headers: record] {
   $body | metadata set { merge {'http.response': {status: $status, headers: $headers}} }
@@ -36,10 +64,10 @@ def token-label [req: record] {
   if not ($h | str starts-with "Basic ") { return null }
   let decoded = (try { $h | str replace 'Basic ' '' | decode base64 | decode utf-8 } catch { "" })
   let parts = ($decoded | split row ':')
-  let tokens = (load-tokens)
+  let keys = (load-keys)
   [($parts.0? | default "") ($parts.1? | default "")]
-    | where {|c| ($c | is-not-empty) and (($tokens | get -o $c) | is-not-empty) }
-    | each {|c| $tokens | get -o $c }
+    | each {|c| label-for-secret $c $keys }
+    | where {|l| ($l | is-not-empty) }
     | get -o 0
 }
 
