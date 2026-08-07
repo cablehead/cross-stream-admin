@@ -14,6 +14,17 @@
  * Pairs with stellar.css (regenerate with: stellar gen, with stellar.key
  * next to stellar.config.json). Light/dark is handled by stellar's
  * :root.dark variable overrides; toggle the `dark` class on <html>.
+ *
+ * Colour usage, the one rule: -on and -dim belong to the shade they are named
+ * for. Text on --neutral-1 takes --neutral-1-on, or --neutral-1-dim when it is
+ * secondary; text on --neutral-3 takes --neutral-3-on. Never a bare ramp step
+ * as a foreground to get "a quieter grey" -- that is choosing a colour by eye,
+ * and it is what the pair exists to prevent. A bare shade is a surface, a
+ * border, or an accent, never a dim.
+ *
+ * Our stellar.css was generated with a low dimTargetLc, so -dim is fainter here
+ * than it should be. The fix is that config knob and a regenerate (Stellar's own
+ * reference site raised it to 65), NOT a different token at the call site.
  */
 
 /* ------------------------------------------------------------------ */
@@ -187,13 +198,17 @@ strong {
   font-weight: var(--font-weight-bold);
 }
 
-/* secondary text is one colour, --neutral-7, and this is where it is set. It reads at
-   about 5.2:1 in light and 5.5:1 in dark, so a note stays legible in both. --neutral-1-dim
-   is a surface-adjacent tint, not a text colour: against the page it lands near 1.7:1,
-   which is why every block that used it had quietly overridden it somewhere. */
+/* Secondary text is set once, here, and it is --neutral-1-dim because the surface it sits
+   on is --neutral-1. That pairing is the whole contract: -on and -dim belong to the shade
+   they are named for and are only correct on it. Reaching for a bare ramp step like
+   --neutral-7 to get "a quieter grey" is picking a colour by eye, which is exactly what
+   the pair exists to stop.
+
+   If -dim reads too faint, the fix is dimTargetLc in the Stellar config, not a different
+   token here -- see the note at the top of this file. */
 small {
   font-size: var(--font-size--1);
-  color: var(--neutral-7);
+  color: var(--neutral-1-dim);
 }
 
 mark {
@@ -297,7 +312,7 @@ blockquote {
   margin: var(--size-1) 0;
   padding: var(--size--2) var(--size-2);
   border-left: var(--border-width-3) solid var(--neutral-4);
-  color: var(--neutral-7);
+  color: var(--neutral-1-dim);
 }
 
 blockquote > :first-child {
@@ -357,7 +372,7 @@ figure {
 
 figcaption {
   font-size: var(--font-size--1);
-  color: var(--neutral-7);
+  color: var(--neutral-1-dim);
   text-align: center;
   margin-top: var(--size--2);
 }
