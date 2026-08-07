@@ -35,9 +35,14 @@ choosing a colour by eye, which is exactly what the pair exists to prevent. A ba
 surface, a border, or an accent — never a dim.
 
 The one sanctioned bare-shade foreground is an **accent**: a hue picked off a ramp to sit on the
-page, the way a link does. `--primary-7` / `--tertiary-7` / `--error-8` on the log's status column
+page, the way a link does. `--primary-7` / `--tertiary-7` / `--error-7` on the log's status column
 are accents. There is no pair for "primary text on a neutral surface", so this is the gap the
 pattern fills. An accent is not a dim.
+
+**Accents all sit at step 7.** One step across every accent means the hue says which class of
+thing it is and nothing else. Escalation is carried by weight — normal, semi-bold, bold — which
+is a scale that is actually ordered, where ramp steps are not. If an accent needs to shout,
+change its weight, not its step.
 
 If `-dim` reads too faint, the fix is **`dimTargetLc` in the Stellar config and a regenerate**,
 never a different token at the call site. See `glossary.md` (`-on`, `-dim`, `dimTargetLc`,

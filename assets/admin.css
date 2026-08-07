@@ -124,12 +124,17 @@ article > nav a[aria-current] { border-bottom-color: currentColor; }
    These are accents, so they are bare shades on purpose -- an accent is a hue picked off a
    ramp to sit on the page, the way a link is, and there is no pair for "primary text on a
    neutral surface". 3xx is not an accent, it is just quiet, so it takes the dim paired to
-   the surface rather than a grey chosen to look like one. */
+   the surface rather than a grey chosen to look like one.
+
+   Every accent sits at step 7. One step across all three means the hue says which class of
+   thing it is and nothing else; escalation is carried by weight, normal to semi-bold to bold,
+   which is a scale that is actually ordered. A step picked per status would be a fourth
+   variable saying the same thing less clearly. */
 .log data { font-weight: var(--font-weight-normal, 400); }
 .log data[value^="2"] { color: var(--primary-7); }
 .log data[value^="3"] { color: var(--neutral-1-dim); }
 .log data[value^="4"] { color: var(--tertiary-7); font-weight: var(--font-weight-semi-bold); }
-.log data[value^="5"] { color: var(--error-8); font-weight: var(--font-weight-bold, 700); }
+.log data[value^="5"] { color: var(--error-7); font-weight: var(--font-weight-bold, 700); }
 
 /* payloads stack under their row, tied to it by one rule */
 .log pre { margin: var(--size--2) 0 var(--size--1) 5.4em; padding-left: var(--size--1); border-left: var(--border-width-1) solid var(--neutral-4); white-space: pre-wrap; overflow-wrap: anywhere; }
