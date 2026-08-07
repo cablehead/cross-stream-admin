@@ -43,6 +43,37 @@ If `-dim` reads too faint, the fix is **`dimTargetLc` in the Stellar config and 
 never a different token at the call site. See `glossary.md` (`-on`, `-dim`, `dimTargetLc`,
 `onTargetLc`, APCA, Lc).
 
+### When to use `-on`, `-dim`, and bold
+
+The pairing rule above says *which* `-on`/`-dim` is legal on a given surface. This says *which
+of the two* to pick, and when weight is allowed to join in.
+
+**Colour carries state. Weight carries structure.**
+
+| use | when |
+| --- | --- |
+| `-on` | what you came to read, and the headings that label it. In a nav: **where you are**. |
+| `-dim` | supporting text — captions, notes, counts, timestamps. In a nav: **where you could go**. |
+| **bold** | the current item, so state never rests on colour alone. Headings get weight from the tag, not from this rule. |
+
+Applied to the sites index: the `Sites` / `Units` headings are `-on`, the current site is `-on`
++ bold, every other site is `-dim`. The tab row follows the identical rule, plus the underline
+it already had. One rule, both navigations, no per-place decision.
+
+Two things this rules out:
+
+- **Don't dim a heading to make it recede.** A heading that shouldn't compete is a smaller or
+  quieter *tag*, not a lower-contrast colour. Dimming structure makes the page look broken
+  rather than calm.
+- **Don't bold something that isn't current.** Bold is not "important", it is "you are here".
+  Emphasis inside prose is `<strong>`, which the tag layer already styles.
+
+**Navigation is not the same as a link.** These rules apply to lists of peers you move between
+(`aside ul`, `article > nav`), which lose their underline and take state colour. A link in
+prose — "all sites & new", a link inside a `<p>` — is an ordinary link: body colour, underline,
+no state. Scope nav rules to the list, never to the whole container, or the prose links inside
+it get silently conscripted.
+
 ### Our stellar.css, and the one edit in it
 
 Generated with a low `dimTargetLc`, so `-dim` came out near Lc 30 — decorative, not readable.

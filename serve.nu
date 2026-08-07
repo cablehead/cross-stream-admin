@@ -520,7 +520,11 @@ def do-restart [label: string] {
               resp "" 302 {Location: "/", "Set-Cookie": [$"session=($hash); Path=/; HttpOnly; Secure; SameSite=Lax" "authnonce=; Path=/; Max-Age=0"]}
             }
           }
-          "/docs" => { docs-page (who-of $sess) $cfg }
+          # the guide is public: the header links it from the login page, so a logged-out
+          # visitor must be able to read it. Everywhere else `who-of` is reached only after an
+          # is-empty guard; here the empty case is legitimate, so it defaults instead. Passing
+          # $sess straight in would hand `nothing` to a `record` param and 500 the page.
+          "/docs" => { docs-page (if ($sess | is-empty) { "" } else { who-of $sess }) $cfg }
           "/auth/logout" => {
             let hash = (cookie $req "session")
             if ($hash | is-not-empty) { do $ss.delete $hash }

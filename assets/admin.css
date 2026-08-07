@@ -59,15 +59,21 @@ figure button[data-copy].copied svg:last-child { display: inline; }
 
 /* Two navigations, and neither needs a name: the sites index is the page's <aside>, the tab
    row is the <article>'s own <nav>. There is one of each, so the tag already says which.
-   What they share -- a link that does not underline, and a current item in bold -- is said
-   once, here. `aria-current` carries the state; no class does. */
-:is(aside, article > nav) a { text-decoration: none; }
-:is(aside, article > nav) a[aria-current] { font-weight: 700; }
+   `aria-current` carries the state; no class does.
 
-/* the index: h2 groups a list, and that is the whole markup. It sets no colour, so every row
-   reads at body contrast and no ranking is encoded in a shade of grey -- sites and units are
-   separate h2 groups, which is the distinction stated rather than dimmed. */
-aside h2 { font-size: var(--font-size--1); text-transform: uppercase; letter-spacing: 0.06em; color: var(--neutral-1-dim); margin-bottom: var(--size--1); }
+   One rule for both: -on is where you are, -dim is where you could go. Bold rides along on the
+   current item so the state never rests on colour alone.
+
+   Scoped to the LISTS, not to the whole aside. A link in aside prose -- "all sites & new" -- is
+   not navigation between peers, it is an ordinary link, and it keeps the underline and the body
+   colour that every other link in the app has. */
+:is(aside ul, article > nav) a { text-decoration: none; color: var(--neutral-1-dim); }
+:is(aside ul, article > nav) a[aria-current] { color: var(--neutral-1-on); font-weight: 700; }
+
+/* the index: h2 groups a list, and that is the whole markup. The headings label the structure,
+   so they are -on with the weight the tag already carries; sites and units are separate h2
+   groups, which is the distinction stated rather than dimmed. */
+aside h2 { font-size: var(--font-size--1); text-transform: uppercase; letter-spacing: 0.06em; color: var(--neutral-1-on); margin-bottom: var(--size--1); }
 aside h2 ~ h2 { margin-top: var(--size-1); }
 aside ul { list-style: none; margin: 0; padding: 0; }
 aside li { margin-block: var(--size--2); }
