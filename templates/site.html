@@ -3,7 +3,7 @@
 {% block body %}
 <div class=site>
 
-<aside class=toc>
+<aside>
   <h2>Sites</h2>
   <ul>
   {% for s in nav if not s.unit %}
@@ -24,16 +24,16 @@
 <p><a href="https://{{ host }}/">{{ host }} &rarr;</a> &middot; {{ state }}</p>
 
 {% if not unit %}
-<nav class=tabs>
+<nav>
   <a href="/s/{{ label }}"{% if tab == "detail" %} aria-current=page{% endif %}>detail</a>
   <a href="/s/{{ label }}/logs"{% if tab == "logs" %} aria-current=page{% endif %}>logs</a>
 </nav>
 {% endif %}
 
 {% if tab == "logs" %}
-<p class=lede>{% if unit %}{{ unit }} &mdash; a unit of this VM, not a site. {% endif %}Newest
+<p><small>{% if unit %}{{ unit }} &mdash; a unit of this VM, not a site. {% endif %}Newest
 first, one line per request; click one for its payloads. The last {{ log_cap }} lines, held in
-the page only.</p>
+the page only.</small></p>
 <ol class=log id=loglines data-init="@get('/s/{{ label }}/logs/stream', {openWhenHidden: true})"></ol>
 <script type=module src="{{ datastar_js | safe }}"></script>
 

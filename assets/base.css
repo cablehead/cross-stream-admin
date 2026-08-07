@@ -1,9 +1,15 @@
 /*
  * base.css - semantic HTML on stellar variables.
  *
- * Layer 1 styles raw elements only, so plain semantic markup gets good
- * typography with no classes. Layer 2 is a small set of utility classes
- * for the bits element selectors cannot cover.
+ * Raw elements only. No classes, with one exception: the syntax scopes below,
+ * which are the class names `.md` puts on its own output, so they are element
+ * styling for generated markup rather than a vocabulary anyone writes.
+ *
+ * It arrived here carrying a utility layer and a component layer from the site
+ * it was written for -- playground, palette, terminal, footer, cards, a view
+ * transition tuner. None of it was ever emitted here, and its docs-sidebar
+ * rules were landing on the one real sidebar. Deleted. Anything this app needs
+ * beyond a raw tag belongs in admin.css, which is where its vocabulary lives.
  *
  * Pairs with stellar.css (regenerate with: stellar gen, with stellar.key
  * next to stellar.config.json). Light/dark is handled by stellar's
@@ -12,104 +18,17 @@
 
 /* ------------------------------------------------------------------ */
 /* MPA view transitions: opt into the browser's default cross-fade on   */
-/* same-origin navigations (Themes -> Reference, etc). Progressive      */
-/* enhancement - unsupported browsers just navigate instantly.          */
+/* same-origin navigations. Progressive enhancement, no script -        */
+/* unsupported browsers just navigate instantly.                        */
 /* ------------------------------------------------------------------ */
 @view-transition {
   navigation: auto;
 }
-/* the root cross-fade, tuned live by the dialog in vt-tuner.js via these custom
-   properties and classes on <html> (persisted to localStorage). */
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation-duration: var(--vt-duration, var(--anim-duration-fast));
-  animation-timing-function: var(--vt-ease, var(--anim-ease-standard));
+  animation-duration: var(--anim-duration-fast);
+  animation-timing-function: var(--anim-ease-standard);
 }
-/* off: swap with no fade */
-:root.vt-off::view-transition-old(root),
-:root.vt-off::view-transition-new(root) {
-  animation: none;
-}
-/* fade-in only: hold the outgoing page, fade the new one in over it */
-:root.vt-fadein::view-transition-old(root) {
-  animation: none;
-}
-/* slide: the new page rises as it fades in */
-:root.vt-slide::view-transition-new(root) {
-  animation-name: vt-slide-in;
-}
-@keyframes vt-slide-in {
-  from { opacity: 0; transform: translateY(0.8rem); }
-  to { opacity: 1; transform: translateY(0); }
-}
-/* scope: name the nav and main so they are their own groups; the page chrome
-   stays put while only the content cross-fades. */
-:root.vt-scope .nav { view-transition-name: vt-nav; }
-:root.vt-scope main { view-transition-name: vt-main; }
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation-duration: 0s;
-  }
-}
-
-/* the tuner: launched from a toolbox button in the nav, opens this dialog. */
-.vt-toggle iconify-icon {
-  display: block;
-  transition: transform var(--anim-duration-base) var(--anim-ease-bounce);
-}
-.vt-toggle:hover iconify-icon { transform: rotate(-9deg) scale(1.14); }
-.vt-toggle[aria-pressed="true"] iconify-icon { transform: rotate(-6deg); }
-#vt-tuner {
-  border: var(--border-width-1) solid var(--neutral-5);
-  border-radius: var(--border-radius-2);
-  background: var(--surface);
-  color: var(--surface-on);
-  padding: var(--size-1) var(--size-2);
-  max-width: min(92vw, 24rem);
-  font-size: var(--font-size--1);
-}
-/* open as a non-modal panel docked to the right edge, so the page transition
-   stays visible behind it; named so it holds steady through the transition. */
-#vt-tuner[open] {
-  position: fixed;
-  inset: auto var(--size-1) auto auto;
-  top: 50%;
-  transform: translateY(-50%);
-  margin: 0;
-  max-height: 92vh;
-  overflow: auto;
-  view-transition-name: vt-panel;
-}
-#vt-tuner h2 { margin: 0 0 var(--size-0); font-size: var(--font-size-1); }
-.vt-note {
-  margin: calc(-1 * var(--size--2)) 0 var(--size-0);
-  max-width: 34ch;
-  font-size: var(--font-size--2);
-  opacity: 0.72;
-}
-.vt-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--size-1);
-  margin-block: var(--size-0);
-}
-.vt-row input[type="range"] { flex: 1; }
-.vt-row select,
-.vt-row input,
-#vt-tuner button { font: inherit; }
-.vt-hint { margin: var(--size-1) 0 var(--size-0); opacity: 0.7; }
-.vt-tryto { display: flex; gap: var(--size-1); flex-wrap: wrap; }
-.vt-tryto a {
-  text-decoration: none;
-  border: var(--border-width-1) solid var(--neutral-5);
-  border-radius: var(--border-radius-1);
-  padding: 0.1em 0.7em;
-  color: inherit;
-}
-.vt-tryto a:hover { background: var(--named-ocean-1); }
-.vt-actions { display: flex; gap: var(--size-1); justify-content: flex-end; margin-top: var(--size-1); }
 
 /* ------------------------------------------------------------------ */
 /* Fonts: self-hosted, names must match the stellar --font-* tokens.    */
@@ -145,7 +64,7 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* Layer 1: elements                                                   */
+/* Elements                                                            */
 /* ------------------------------------------------------------------ */
 
 *,
@@ -268,9 +187,13 @@ strong {
   font-weight: var(--font-weight-bold);
 }
 
+/* secondary text is one colour, --neutral-7, and this is where it is set. It reads at
+   about 5.2:1 in light and 5.5:1 in dark, so a note stays legible in both. --neutral-1-dim
+   is a surface-adjacent tint, not a text colour: against the page it lands near 1.7:1,
+   which is why every block that used it had quietly overridden it somewhere. */
 small {
   font-size: var(--font-size--1);
-  color: var(--neutral-1-dim);
+  color: var(--neutral-7);
 }
 
 mark {
@@ -374,7 +297,7 @@ blockquote {
   margin: var(--size-1) 0;
   padding: var(--size--2) var(--size-2);
   border-left: var(--border-width-3) solid var(--neutral-4);
-  color: var(--neutral-1-dim);
+  color: var(--neutral-7);
 }
 
 blockquote > :first-child {
@@ -434,7 +357,7 @@ figure {
 
 figcaption {
   font-size: var(--font-size--1);
-  color: var(--neutral-1-dim);
+  color: var(--neutral-7);
   text-align: center;
   margin-top: var(--size--2);
 }
@@ -452,7 +375,7 @@ summary {
 }
 
 /* one button: a mono, currentColor-outlined action that reads on any surface.
-   variants .btn-go (lit primary) and .btn-tab (segmented) live in brand.css. */
+   There are no variants; every button in the app is this one. */
 button {
   -webkit-appearance: none;
   appearance: none;
@@ -620,319 +543,3 @@ pre .invalid {
   color: var(--code-error);
 }
 
-/* ------------------------------------------------------------------ */
-/* Layer 2: utilities (atomic, single purpose, composed in markup)     */
-/* ------------------------------------------------------------------ */
-
-.container { width: 100%; max-width: 1200px; margin-inline: auto; padding-inline: var(--size-2); }
-.center { text-align: center; }
-.muted { color: var(--neutral-1-dim); }
-.mx-auto { margin-inline: auto; }
-.upper { text-transform: uppercase; letter-spacing: var(--font-letter-spacing-1); }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--size-2); }
-
-/* ------------------------------------------------------------------ */
-/* Layer 3: components (a small, composable set)                       */
-/* ------------------------------------------------------------------ */
-
-/* nav: brand left, links right; colors inherit from the surrounding context */
-.nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--size-1);
-  max-width: 1200px;
-  margin-inline: auto;
-  padding: var(--size-1) var(--size-2);
-}
-
-.nav a { text-decoration: none; }
-.nav a:hover { text-decoration: underline; }
-.nav .brand { font-weight: var(--font-weight-bold); }
-.nav .links { display: flex; align-items: center; gap: var(--size-2); }
-
-/* structure only; the surface comes from a `.panel` utility composed in markup */
-.card {
-  display: block;
-  border: var(--border-width-1) solid var(--neutral-4);
-  border-radius: var(--border-radius-2);
-  padding: var(--size-1);
-  box-shadow: var(--shadow-2);
-  text-decoration: none;
-  transition-property: transform, box-shadow, background;
-  transition-duration: var(--anim-duration-fast);
-  transition-timing-function: var(--anim-ease-standard);
-}
-
-/* sub-text inside a card dims the card's own color, not the page surface */
-.card :is(small, .muted) {
-  color: inherit;
-  opacity: 0.7;
-}
-
-/* code block with a copy button (markup from inject-copy-btns) */
-.code-block { position: relative; }
-.copy-btn {
-  position: absolute;
-  top: var(--size--1);
-  right: var(--size--1);
-  background: var(--code-bg);
-  border: var(--border-width-1) solid var(--code-border);
-  color: var(--code-fg);
-  cursor: pointer;
-  opacity: 0;
-  padding: 0.35rem;
-  border-radius: var(--border-radius-1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  z-index: 1;
-}
-
-.code-block:hover .copy-btn {
-  opacity: 0.7;
-  transition: opacity var(--anim-duration-fast) var(--anim-ease-standard);
-}
-
-.copy-btn:hover {
-  opacity: 1;
-  background: var(--primary-6);
-  color: var(--primary-6-on);
-}
-
-/* --- theme namespace: facet nav, playground, chips ------------------ */
-
-/* facet switcher (Overview | Reference | Example) under the theme title */
-.facets {
-  display: flex;
-  gap: var(--size-1);
-  margin: var(--size--1) 0 var(--size-2);
-  border-bottom: var(--border-width-1) solid var(--neutral-4);
-}
-.facets a {
-  text-decoration: none;
-  padding: var(--size--2) 0;
-  font-weight: var(--font-weight-medium);
-  border-bottom: var(--border-width-2) solid transparent;
-  margin-bottom: calc(-1 * var(--border-width-1));
-}
-.facets a.active {
-  border-bottom-color: currentColor;
-}
-
-/* the .mj playground: two source panes, preset chips, a live output */
-.playground {
-  margin: var(--size-1) 0 var(--size-3);
-}
-.pg-inputs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--size-0);
-}
-.pg-field,
-.pg-output {
-  display: flex;
-  flex-direction: column;
-  gap: var(--size--2);
-}
-.pg-field label,
-.pg-output label,
-.pg-presets {
-  font-size: var(--font-size--1);
-  text-transform: uppercase;
-  letter-spacing: var(--font-letter-spacing-1);
-}
-.playground textarea {
-  font-family: var(--font-mono);
-  font-size: var(--font-size--1);
-  line-height: var(--code-line-height);
-  padding: var(--size--1);
-  border: var(--border-width-1) solid var(--neutral-4);
-  border-radius: var(--border-radius-1);
-  background: var(--code-bg);
-  color: var(--code-fg);
-  resize: vertical;
-  outline: none;
-}
-.pg-presets {
-  display: flex;
-  align-items: center;
-  gap: var(--size--2);
-  margin: var(--size-0) 0;
-}
-.pg-output {
-  margin-top: var(--size-1);
-}
-.tpl-out {
-  padding: var(--size--1) var(--size-0);
-  border: var(--border-width-1) dashed var(--neutral-4);
-  border-radius: var(--border-radius-1);
-  min-height: 2.5em;
-}
-.tpl-out.is-err {
-  font-family: var(--font-mono);
-  font-size: var(--font-size--1);
-  color: var(--code-error);
-}
-
-/* streaming theme: a live SSE row (buttons that patch in place) */
-.pg-live {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--size-0);
-  font-family: var(--font-mono);
-  font-size: var(--font-size--1);
-}
-.pg-val {
-  font-weight: var(--font-weight-bold);
-}
-
-/* storage theme: the guestbook input + list */
-.pg-input {
-  font-family: var(--font-mono);
-  font-size: var(--font-size--1);
-  padding: 0.2em 0.6em;
-  border: var(--border-width-1) solid var(--neutral-4);
-  border-radius: var(--border-radius-1);
-  background: var(--code-bg);
-  color: var(--code-fg);
-  outline: none;
-}
-.guestbook ul {
-  margin: var(--size--1) 0 0;
-}
-
-/* playground stays within narrow viewports: let grid cells shrink, stack inputs */
-.pg-field,
-.pg-output {
-  min-width: 0;
-}
-.playground textarea {
-  width: 100%;
-}
-@media (max-width: 540px) {
-  .pg-inputs {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* narrow screens: let the top nav wrap instead of overflowing */
-@media (max-width: 540px) {
-  .nav {
-    flex-wrap: wrap;
-  }
-  .nav .links {
-    gap: var(--size-0);
-  }
-}
-
-/* let the preset chips wrap rather than overflow on narrow screens */
-.pg-presets {
-  flex-wrap: wrap;
-}
-
-/* shared site footer */
-.site-footer {
-  margin-top: var(--size-5);
-  padding: var(--size-2) 0;
-  border-top: var(--border-width-1) solid var(--neutral-4);
-  font-size: var(--font-size--1);
-}
-
-/* hello-world tutorial: reuse the splash .terminal, two windows broken out to
-   full viewport width with economical chrome, so the log lines fit with little
-   scroll */
-.terminal-row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--size-1);
-  margin-block: var(--size-2);
-}
-.terminal-row .terminal {
-  margin-block: 0;
-}
-.term-cmd {
-  display: flex;
-  align-items: center;
-  gap: var(--size--2);
-  flex-wrap: wrap;
-}
-
-/* design section: brand palette table */
-.pal-table { border-collapse: collapse; width: 100%; max-width: 46rem; margin-block: var(--size-2); }
-.pal-table th {
-  text-align: left;
-  font-size: var(--font-size--1);
-  font-weight: var(--font-weight-semi-bold);
-  color: var(--neutral-1-dim);
-  padding: var(--size--2) var(--size-0);
-  border-bottom: var(--border-width-2) solid var(--neutral-4);
-}
-.pal-table td {
-  padding: var(--size--2) var(--size-0);
-  border-bottom: var(--border-width-1) solid var(--neutral-3);
-  vertical-align: middle;
-}
-.pal-cell {
-  width: 2.6rem;
-  height: 1.4rem;
-  border-radius: var(--border-radius-1);
-  border: var(--border-width-1) solid var(--neutral-4);
-}
-.pal-name { font-weight: var(--font-weight-bold); }
-.pal-ramp { display: flex; gap: var(--size--2); }
-.pal-ramp .pal-cell { width: 3.2rem; }
-
-/* design section: component breakdown with per-part tokens */
-.dz-example { margin: var(--size-1) 0 var(--size-3); }
-.dz-btns { display: flex; gap: var(--size-0); align-items: center; flex-wrap: wrap; }
-.dz-part { margin-block: var(--size-2); }
-.dz-part h3 { margin-bottom: var(--size--2); }
-.dz-demo { margin: var(--size-0) 0; }
-.dz-tokens { display: flex; flex-direction: column; gap: var(--size--2); font-size: var(--font-size--1); }
-.tok { display: flex; align-items: center; gap: var(--size-0); }
-.tok-label { min-width: 7em; color: var(--neutral-1-dim); }
-.tok-sw {
-  flex: none;
-  width: 1.1em;
-  height: 1.1em;
-  border-radius: var(--border-radius-1);
-  border: var(--border-width-1) solid var(--neutral-4);
-}
-.tok-sw-none { border: 0; visibility: hidden; }
-.terminal-title {
-  display: flex;
-  align-items: center;
-  gap: var(--size--1);
-}
-.terminal-action {
-  margin-left: auto;
-}
-.terminal-body code {
-  background: transparent;
-  padding: 0;
-  color: inherit;
-  white-space: pre;
-}
-.terminal-body pre {
-  background: transparent;
-  border: 0;
-  margin: 0;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  white-space: pre;
-}
-.term-out {
-  white-space: pre;
-  overflow-x: auto;
-}
-/* on wide viewports the splash demo runs server + client side by side; the
-   tutorial page keeps them stacked in its narrower reading column. */
-@media (min-width: 900px) {
-  .demo-wide .terminal-row { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
-  .demo-wide .terminal-row > * { min-width: 0; }
-}
