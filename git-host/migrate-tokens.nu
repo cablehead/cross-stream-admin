@@ -73,5 +73,20 @@ def main [] {
       if $r.exit_code == 0 { $added = $added + 1 }
     }
   }
-  print $"migrated ($added) of ($rows | length) key\(s\)"
+  # Retire the file once every key in it is in the store. This is what makes a deletion
+  # stick: while tokens.json exists, the next run re-adds anything missing from the store,
+  # so revoking a migrated key in the admin would resurrect it on the following deploy --
+  # silently, and only for the keys most likely to need revoking. It is renamed rather than
+  # removed, because it is the only copy of those secrets and a rename is undoable.
+  let after = (store-hashes)
+  if $after == null {
+    error make {msg: "migrated, but could not re-read the store to confirm; leaving tokens.json in place"}
+  }
+  let missing = ($rows | where {|e| not (($e.secret | hash sha256) in $after) } | length)
+  if $missing == 0 {
+    mv $TOKENS $"($TOKENS).migrated"
+    print $"migrated ($added) of ($rows | length) key\(s\); tokens.json retired to tokens.json.migrated"
+  } else {
+    print $"migrated ($added) of ($rows | length) key\(s\); ($missing) still missing, keeping tokens.json"
+  }
 }
