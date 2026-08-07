@@ -6,8 +6,14 @@
 <aside class=toc>
   <h2>Sites</h2>
   <ul>
-  {% for s in nav %}
-    <li{% if s.unit %} class=unit{% endif %}><a href="{{ s.href | safe }}"{% if s.current %} aria-current=page{% endif %}>{{ s.label }}</a></li>
+  {% for s in nav if not s.unit %}
+    <li><a href="{{ s.href | safe }}"{% if s.current %} aria-current=page{% endif %}>{{ s.label }}</a></li>
+  {% endfor %}
+  </ul>
+  <h2>Units</h2>
+  <ul>
+  {% for s in nav if s.unit %}
+    <li><a href="{{ s.href | safe }}"{% if s.current %} aria-current=page{% endif %}>{{ s.label }}</a></li>
   {% endfor %}
   </ul>
   <p><small><a href="/">all sites &amp; new</a></small></p>
