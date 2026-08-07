@@ -22,9 +22,8 @@
  * and it is what the pair exists to prevent. A bare shade is a surface, a
  * border, or an accent, never a dim.
  *
- * Our stellar.css was generated with a low dimTargetLc, so -dim is fainter here
- * than it should be. The fix is that config knob and a regenerate (Stellar's own
- * reference site raised it to 65), NOT a different token at the call site.
+ * See CLAUDE.md in this directory for the rest: the two-hammer test for adding a
+ * class, what the vocabulary is, and why stellar.css carries one hand edit.
  */
 
 /* ------------------------------------------------------------------ */
