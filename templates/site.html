@@ -102,9 +102,9 @@ then delete the old one. Nothing is down in between, because both work until you
   {% if datastar %}<li><strong>datastar</strong>, the Datastar JS bundle is served at <code>$DATASTAR_JS_PATH</code>.</li>{% endif %}
 </ul>
 {% else %}
-<p><small>None enabled. Add a <code>cross-stream.nuon</code> at your repo root, e.g. <code>{ store: true }</code>, to turn on the embedded store, services, or datastar. Everything is off by default.</small></p>
+<p><small>None enabled. Add a <code>cross-stream.nuon</code> at your repo root, e.g. <code>{ store: true }</code>, to turn on the embedded store, services, datastar, or nushell plugins. Everything is off by default.</small></p>
 {% endif %}
-<p><small>The manifest is a record of booleans, and the three keys above are the only ones accepted. Unknown keys and malformed nuon are rejected at push time, with the reason in your <code>git push</code> output.</small></p>
+<p><small><code>store</code>, <code>services</code> and <code>datastar</code> are booleans; <code>plugins</code> is a list of stock plugin names or paths to plugin binaries committed in your repo. Those four keys are the only ones accepted. Unknown keys and malformed nuon are rejected at push time, with the reason in your <code>git push</code> output. See the <a href="/docs">site guide</a>.</small></p>
 
 <h2>Writing your site</h2>
 <p>The <a href="/docs">site guide</a> covers what to expect: which paths survive a deploy and which are wiped, where a SQLite file belongs, the manifest keys in full, and what to build against if you want to commit a static binary.</p>

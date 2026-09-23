@@ -70,7 +70,7 @@ A repo may also carry a `cross-stream.nuon` manifest to opt into http-nu feature
 off by default:
 
 ```
-{ store: true, services: true, datastar: true }
+{ store: true, services: true, datastar: true, plugins: ["polars"] }
 ```
 
 `store` enables the embedded event store, `services` enables actors/services/actions (and

@@ -69,13 +69,23 @@ A pushed repo needs a `serve.nu` at its root, an http-nu handler. It may also ca
 `cross-stream.nuon` to opt into http-nu features. Everything is off by default:
 
 ```
-{ store: true, services: true, datastar: true }
+{ store: true, services: true, datastar: true, plugins: ["polars"] }
 ```
 
 The hook whitelists these keys and builds the flags itself (`--store <persistent path>`,
 `--services`, `--datastar`, where `services` implies `store`). A repo declares intent, never raw
-args, so it cannot inject `--expose`, `--tls`, `-c`, or `--plugin`. The store persists at
+args, so it cannot inject `--expose`, `--tls`, or `-c`. The store persists at
 `/home/app/sites/<label>/store` across redeploys, and is removed only when the site is deleted.
+
+`plugins` is the one key that names files rather than flipping a switch, so it is the one with
+real checking. A bare name is a stock plugin from the image (`polars` -> `/usr/local/bin/nu_plugin_polars`);
+anything containing a `/` is a binary committed in the repo, resolved under the work-tree and
+required to be named `nu_plugin_*`. Absolute paths and `..` are refused. The prefix is always
+ours, so `--plugin` still cannot be pointed at an arbitrary path.
+
+`manifest-flags.nu` does that resolution at deploy time and `validate-manifest.nu` repeats it at
+push time. The duplication is deliberate: the hook gives better errors, but a site deployed from
+a public git URL never runs the hook, so the deploy-time copy is the gate that holds.
 
 ### Writable paths
 

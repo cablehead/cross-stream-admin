@@ -40,23 +40,17 @@ if [ ! -f "$WORKTREE/serve.nu" ]; then
 fi
 
 # --- opt-in http-nu features from the repo manifest (cross-stream.nuon) --------
-# A repo declares INTENT as booleans; everything is off by default. We read only the known
-# booleans and build the flag string ourselves (paths are ours), so a pushed repo can never
-# inject raw args like --expose / --tls / -c / --plugin. `open` on a .nuon file is data
-# deserialization, not evaluation, so it is safe.
+# A repo declares INTENT; everything is off by default. The resolution lives in a .nu file so
+# there is no bash/nu quoting to get wrong (same reasoning as pre-receive's validator), and so
+# the flag-building and the push-time validation can be read side by side.
+#
+# It prints the flag string on stdout and warnings on stderr, so a skipped plugin shows up in
+# the pusher's `git push` output without corrupting the flags.
 MANIFEST="$WORKTREE/cross-stream.nuon"
 flags=""
 if [ -f "$MANIFEST" ]; then
-  flags=$(MANIFEST="$MANIFEST" STORE_DIR="$STORE_DIR" /usr/local/bin/nu -n -c '
-    let m = (try { open ($env.MANIFEST) } catch { {} })
-    let services = (($m | get -o services | default false) == true)
-    let store = ((($m | get -o store | default false) == true) or $services)
-    mut f = []
-    if $store { $f = ($f | append $"--store ($env.STORE_DIR)") }
-    if $services { $f = ($f | append "--services") }
-    if (($m | get -o datastar | default false) == true) { $f = ($f | append "--datastar") }
-    $f | str join " "
-  ' 2>/dev/null || true)
+  flags=$(MANIFEST="$MANIFEST" STORE_DIR="$STORE_DIR" WORKTREE="$WORKTREE" \
+    /usr/local/bin/nu -n /home/app/git-host/manifest-flags.nu || true)
 fi
 
 # The store must survive redeploys (we only wipe repo/) and be writable by the site's group:

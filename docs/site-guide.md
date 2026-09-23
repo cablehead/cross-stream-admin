@@ -16,19 +16,54 @@ here unchanged. The rest of this page is the small set of things that are specif
 Everything is off by default. A repo opts in with a **`cross-stream.nuon`** at its root:
 
 ```
-{ store: true, services: true, datastar: true }
+{ store: true, services: true, datastar: true, plugins: ["polars"] }
 ```
 
-Those three booleans are the whole vocabulary:
+That is the whole vocabulary:
 
 | key | effect |
 |-----|--------|
 | `store` | the embedded event store (`.cat`, `.append`, `.cas`), at `$HTTP_NU.store` |
 | `services` | actors, services, and actions. Implies `store` |
 | `datastar` | serves the Datastar JS bundle at `$DATASTAR_JS_PATH` |
+| `plugins` | nushell plugins to load. A list, not a boolean. See below |
 
 You declare intent, not flags. Unknown keys and malformed nuon are rejected when you push, with
 the reason printed in your `git push` output.
+
+### Plugins
+
+`plugins` is a list, and an entry is one of two things.
+
+**A stock plugin**, named without its `nu_plugin_` prefix. These ship in the image, so they cost
+you nothing:
+
+```
+{ plugins: ["polars", "query"] }
+```
+
+| name | what it gives you |
+|------|-------------------|
+| `polars` | dataframes: `polars open`, `polars into-df`, and the rest |
+| `query` | `query json`, `query web`, `query xml` |
+| `formats` | `from eml`, `from ics`, `from ini`, `from plist`, `from vcf` |
+| `gstat` | `gstat`, git status as structured data |
+| `inc`, `example`, `custom_values`, `stress_internals` | nushell's own demo plugins |
+
+**A plugin you built yourself**, committed in your repo and named with the path to it:
+
+```
+{ plugins: ["bin/nu_plugin_largediff"] }
+```
+
+There is no build step on the server, so commit the binary the same way you would commit any
+other helper executable. It must be a `linux/x86_64` build, named `nu_plugin_<something>`, and
+built against the same nushell version the site runs (`nu --version` in this image reports the
+one to match). Paths are relative to your repo root; absolute paths and `..` are rejected.
+
+An entry that cannot be resolved is skipped with a warning in your `git push` output rather than
+failing the deploy, so a typo shows up as a missing command at runtime. Check the push output if
+a plugin's commands are not there.
 
 ## Files
 
