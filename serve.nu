@@ -384,9 +384,9 @@ def dsp [selector: string, mode: string] { to datastar-patch-elements --selector
 # to be joined before it can be sent as a single patch.
 def html-join [nodes: list] { {__html: ($nodes | each {|n| $n.__html } | str join "")} }
 
-# No client-IP column: `trusted_ip` is absent from every request across ndyg's five sites,
-# because the sites listen on unix sockets and none runs with `--trust-proxy`. It would be a
-# permanently blank column. Whatever the request carries is in its payload, one click away.
+# The client column is `trusted_ip`, which http-nu resolves from X-Forwarded-For because
+# site@.service runs it with `--trust-proxy 10.79.0.2/32` (the edge). Requests logged before
+# that flag landed have none, and the cell is blank for them.
 #
 # One row per request, not three: http-nu emits request -> response -> complete sharing a
 # request_id, and they belong on one apache-style line. `res` and `comp` are null while the
@@ -404,6 +404,7 @@ def row-req [i: int, ts: string, rid: string, req: record, res: any, comp: any] 
         (TIME $ts)
         (B ($req.method? | default "?"))
         (CODE ($req.path? | default ""))
+        (SAMP ($req.trusted_ip? | default ""))
         (DATA {value: $st} $st)
         (SMALL (if $comp == null { "" } else { log-bytes ($comp.bytes? | default 0) }))
         (SMALL (if $comp == null { "" } else { $"($comp.duration_ms? | default 0)ms" })))

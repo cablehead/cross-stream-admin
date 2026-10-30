@@ -106,7 +106,7 @@ article > nav a[aria-current] { border-bottom-color: currentColor; }
    the columns up down the page. */
 /* the shared first three tracks are identical to the note line above, so the path column
    and a note's text start at the same x all the way down */
-.log summary:has(data) { grid-template-columns: 4.6em 5em minmax(0, 1fr) 2.6em 3.6em 4em; }
+.log summary:has(data) { grid-template-columns: 4.6em 5em minmax(0, 1fr) 9.5em 2.6em 3.6em 4em; }
 .log li:nth-child(even) { background: var(--neutral-2); }
 .log li:hover { background: var(--neutral-3); }
 
@@ -116,9 +116,10 @@ article > nav a[aria-current] { border-bottom-color: currentColor; }
 .log time { color: var(--neutral-1-dim); font-variant-numeric: tabular-nums; }
 /* only the cells clip to one line -- `.log span` would also catch every span .highlight emits
    inside a payload, which is what stopped the JSON wrapping */
-.log code, .log summary > span, .log > li > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log code, .log samp, .log summary > span, .log > li > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .log code { background: none; padding: 0; }
 .log data, .log small { text-align: right; font-variant-numeric: tabular-nums; }
+.log samp { color: var(--neutral-1-dim); font-family: inherit; font-variant-numeric: tabular-nums; }
 
 /* the one column worth colouring: 2xx is the quiet case, the rest earn attention.
    These are accents, so they are bare shades on purpose -- an accent is a hue picked off a
@@ -140,5 +141,5 @@ article > nav a[aria-current] { border-bottom-color: currentColor; }
 .log pre { margin: var(--size--2) 0 var(--size--1) 5.4em; padding-left: var(--size--1); border-left: var(--border-width-1) solid var(--neutral-4); white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 55rem) {
   .log > li, .log summary { grid-template-columns: 4.4em 2.6em minmax(0, 1fr) 2.4em 3.2em; }
-  .log small:last-of-type { display: none; }
+  .log small:last-of-type, .log samp { display: none; }
 }

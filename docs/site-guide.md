@@ -99,6 +99,13 @@ let db = ($env.CROSS_STREAM_SITE_STATE | path join "app.db")
 Do not put it in the repo and `.gitignore` it. That is the one arrangement guaranteed to lose
 your data on the next push.
 
+### The visitor's address
+
+`$req.trusted_ip` is the visitor's IP address. Requests reach your site through two proxies,
+so `X-Forwarded-For` reads `<visitor>, 10.79.0.2`; `trusted_ip` is that header already resolved,
+so use it rather than parsing the header. `$req.remote_ip` is never set, because your site
+listens on a unix socket and has no peer address of its own.
+
 ## Platform
 
 The host is Ubuntu 24.04, but your handler runs **sandboxed** — an ephemeral non-root user,
