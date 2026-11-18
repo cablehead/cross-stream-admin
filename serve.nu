@@ -216,7 +216,16 @@ def admin-page [user: string, cfg: record, reg: list] {
 def site-flags [label: string] {
   let envf = $"($SITES)/($label)/env"
   let s = (if ($envf | path exists) { open --raw $envf } else { "" })
-  { store: ($s | str contains "--store"), services: ($s | str contains "--services"), datastar: ($s | str contains "--datastar") }
+  # http_nu: the version the site's env pins (HTTPNU_VERSION), else the layer's default
+  # (/opt/http-nu/default), which ce-http-nu runs; a layer without /opt/http-nu has one.
+  let pin = ($s | lines | where {|l| $l | str starts-with "HTTPNU_VERSION=" } | get -o 0 | default "" | str replace "HTTPNU_VERSION=" "")
+  let default = (try { ls -l /opt/http-nu/default | get 0.target | path basename } catch { "" })
+  let carried = (try { ls /opt/http-nu | where type != symlink | get name | path basename | sort } catch { [] })
+  {
+    store: ($s | str contains "--store"), services: ($s | str contains "--services"), datastar: ($s | str contains "--datastar")
+    http_nu: (if ($pin | is-not-empty) { $pin } else { $default }), http_nu_pinned: ($pin | is-not-empty)
+    http_nu_carried: ($carried | str join ", ")
+  }
 }
 
 # The left column: every site, as a link that stays on whichever tab you're reading. That's the

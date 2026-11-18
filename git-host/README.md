@@ -83,6 +83,14 @@ anything containing a `/` is a binary committed in the repo, resolved under the 
 required to be named `nu_plugin_*`. Absolute paths and `..` are refused. The prefix is always
 ours, so `--plugin` still cannot be pointed at an arbitrary path.
 
+`http_nu` pins the site to one of the http-nu versions the VM's layer carries, under
+`/opt/http-nu/<version>/` (`{ http_nu: "0.19.0" }`). Each version's folder holds its `http-nu`
+and the stock plugins built for its nushell, so `"polars"` resolves to the pinned version's
+`nu_plugin_polars`. Without a pin a site runs `/opt/http-nu/default`, which moves only once every
+site has moved. The deploy writes the pin to the site's env as `HTTPNU_VERSION`, and the layer's
+`ce-http-nu` runs that version. A pin below 0.19 is refused for a site whose store 0.19 or later
+has opened, because older releases can't read it (cross-stream 0.16).
+
 `manifest-flags.nu` does that resolution at deploy time and `validate-manifest.nu` repeats it at
 push time. The duplication is deliberate: the hook gives better errors, but a site deployed from
 a public git URL never runs the hook, so the deploy-time copy is the gate that holds.

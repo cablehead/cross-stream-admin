@@ -1,7 +1,8 @@
-# Resolve a cross-stream.nuon manifest into http-nu flags. Called by ce-site-deploy with
-# $env.MANIFEST, $env.STORE_DIR and $env.WORKTREE set. Prints the flag string on stdout and
-# nothing else, because ce-site-deploy captures stdout straight into HTTPNU_FLAGS; anything
-# to say to the pusher goes to stderr, which lands in their `git push` output.
+# Resolve a cross-stream.nuon manifest into the http-nu version and flags. Called by
+# ce-site-deploy with $env.MANIFEST, $env.STORE_DIR and $env.WORKTREE set. Prints two lines on
+# stdout and nothing else: the pinned version (empty for the layer's default), then the flag
+# string. ce-site-deploy reads them into HTTPNU_VERSION and HTTPNU_FLAGS; anything to say to
+# the pusher goes to stderr, which lands in their `git push` output.
 #
 # A repo declares INTENT. We read only the known keys and build every path ourselves, so a
 # pushed repo can never inject raw args like --expose / --tls / -c. `open` on a .nuon file is
@@ -21,10 +22,22 @@ if $store { $f = ($f | append $"--store ($env.STORE_DIR)") }
 if $services { $f = ($f | append "--services") }
 if (($m | get -o datastar | default false) == true) { $f = ($f | append "--datastar") }
 
+def warn [msg: string] { print -e $"post-receive: WARNING ($msg)" }
+
+# http_nu: one of the versions under /opt/http-nu, or the layer's default. A pin this VM
+# doesn't carry falls back to the default, loudly (validate-manifest.nu refuses it at push).
+let pin = ($m | get -o http_nu | default "" | into string)
+let pin = if ($pin | is-empty) { "" } else if (($pin =~ '^\d+\.\d+\.\d+$') and ($"/opt/http-nu/($pin)/http-nu" | path exists)) { $pin } else {
+  warn $"no http-nu ($pin) on this VM, running the default"; ""
+}
+# Stock plugins come from the same folder as the http-nu that loads them, so they always match
+# its nushell. A layer without /opt/http-nu keeps them in /usr/local/bin.
+let vdir = if ($pin | is-not-empty) { $"/opt/http-nu/($pin)" } else { "/opt/http-nu/default" }
+let stock = {|name| if ($"($vdir)/nu_plugin_($name)" | path exists) { $"($vdir)/nu_plugin_($name)" } else { $"/usr/local/bin/nu_plugin_($name)" } }
+
 # plugins: a bare name is a stock plugin from the image, anything with a "/" is a binary
 # committed in the repo, resolved under the work-tree. A bad entry is skipped with a loud
 # warning rather than failing the deploy, matching how a missing serve.nu is handled.
-def warn [msg: string] { print -e $"post-receive: WARNING ($msg)" }
 
 let plugins = ($m | get -o plugins | default [])
 if ($plugins | describe | str starts-with "list") {
@@ -44,7 +57,7 @@ if ($plugins | describe | str starts-with "list") {
       if $repo_local and ((($p | path basename) =~ '^nu_plugin_[A-Za-z0-9_-]+$') == false) {
         warn $"skipping ($p): a plugin committed in your repo must be named nu_plugin_*"
       } else {
-        let abs = (if $repo_local { $env.WORKTREE | path join $p } else { $"/usr/local/bin/nu_plugin_($p)" })
+        let abs = (if $repo_local { $env.WORKTREE | path join $p } else { do $stock $p })
         if ($abs | path exists) {
           $f = ($f | append $"--plugin ($abs)")
         } else if $repo_local {
@@ -57,4 +70,5 @@ if ($plugins | describe | str starts-with "list") {
   }
 }
 
-$f | str join " "
+print $pin
+print ($f | str join " ")

@@ -26,16 +26,18 @@ WORKTREE=$SITE/repo
 STORE_DIR=$SITE/store
 STATE_DIR=$SITE/state
 
-# Wipe first so files deleted in the push do not linger. Only repo/ is rebuilt; the persistent
-# dirs below are left alone.
-rm -rf "$WORKTREE"
-mkdir -p "$WORKTREE"
-tar -x -C "$WORKTREE" -f -
+# Unpack into repo.new first, so a push that is refused below (a pin the store can't go back
+# to) leaves the running site and its repo/ as they were. Only repo/ is rebuilt; the
+# persistent dirs below are left alone.
+NEW=$SITE/repo.new
+rm -rf "$NEW"
+mkdir -p "$NEW"
+tar -x -C "$NEW" -f -
 # Scoped to the work-tree on purpose: it is what the push just rebuilt, and the only thing whose
 # modes should be normalised here.
-chmod -R a+rX "$WORKTREE"
+chmod -R a+rX "$NEW"
 
-if [ ! -f "$WORKTREE/serve.nu" ]; then
+if [ ! -f "$NEW/serve.nu" ]; then
   echo "post-receive: WARNING no serve.nu at repo root, site@$LABEL will fail to start"
 fi
 
@@ -46,12 +48,33 @@ fi
 #
 # It prints the flag string on stdout and warnings on stderr, so a skipped plugin shows up in
 # the pusher's `git push` output without corrupting the flags.
-MANIFEST="$WORKTREE/cross-stream.nuon"
+#
+# Its first line is the pinned http-nu version (empty: the layer's default), its second the
+# flags. It checks plugin paths in repo.new; the flags name them where they will live, repo/.
+MANIFEST="$NEW/cross-stream.nuon"
+version=""
 flags=""
 if [ -f "$MANIFEST" ]; then
-  flags=$(MANIFEST="$MANIFEST" STORE_DIR="$STORE_DIR" WORKTREE="$WORKTREE" \
+  out=$(MANIFEST="$MANIFEST" STORE_DIR="$STORE_DIR" WORKTREE="$NEW" \
     /usr/local/bin/nu -n /home/app/git-host/manifest-flags.nu || true)
+  version=$(printf '%s\n' "$out" | sed -n 1p)
+  flags=$(printf '%s\n' "$out" | sed -n 2p)
+  flags=${flags//"$NEW"/"$WORKTREE"}
 fi
+
+# A store that http-nu 0.19 or later has opened can't be opened by an older one again
+# (cross-stream 0.16). ce-http-nu leaves .http-nu-0.19 in the store when that happens; a pin
+# below 0.19 for such a store is refused here, before anything changes.
+effective=${version:-$(basename "$(readlink -f /opt/http-nu/default 2>/dev/null)" 2>/dev/null)}
+if [[ "$flags" == *"--store"* ]] && [ -e "$STORE_DIR/.http-nu-0.19" ] && [ -n "$effective" ] \
+  && [ "$(printf '%s\n0.19.0\n' "$effective" | sort -V | head -1)" != 0.19.0 ]; then
+  echo "post-receive: REFUSED http-nu $effective: this site's store has been opened by 0.19 or later, and older releases can't read it. Pin 0.19.0 or later." >&2
+  rm -rf "$NEW"
+  exit 1
+fi
+
+rm -rf "$WORKTREE"
+mv "$NEW" "$WORKTREE"
 
 # The store must survive redeploys (we only wipe repo/) and be writable by the site's group:
 # root-owned, group `sites`, setgid so frames inherit the group.
@@ -68,9 +91,11 @@ install -d -m 2770 -g sites "$STATE_DIR"
 # Hand the flags to systemd via the unit's EnvironmentFile (empty = no flags).
 # CROSS_STREAM_SITE_STATE lands in the site's environment too, so a handler reaches its state
 # dir as $env.CROSS_STREAM_SITE_STATE rather than hard-coding a path that embeds its own label.
-{ printf 'HTTPNU_FLAGS=%s\n' "$flags"; printf 'CROSS_STREAM_SITE_STATE=%s\n' "$STATE_DIR"; } \
-  > "$SITE/env"
-echo "post-receive: http-nu flags for $LABEL: ${flags:-<none>}"
+# HTTPNU_VERSION, when the manifest pins one, is read by the layer's ce-http-nu, which runs
+# /opt/http-nu/<version>/http-nu; without it, the layer's default.
+{ printf 'HTTPNU_FLAGS=%s\n' "$flags"; printf 'CROSS_STREAM_SITE_STATE=%s\n' "$STATE_DIR"
+  if [ -n "$version" ]; then printf 'HTTPNU_VERSION=%s\n' "$version"; fi; } > "$SITE/env"
+echo "post-receive: http-nu ${version:-default} for $LABEL, flags: ${flags:-<none>}"
 
 # enable, not just restart: a pushed site must survive a reboot. restart alone leaves the unit
 # running but not wanted-by multi-user.target, so the next VM reboot drops it. enable creates

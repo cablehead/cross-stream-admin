@@ -94,6 +94,14 @@ root):</small></p>
 last few characters tell you which is which. To roll one: add a key, switch your remote over,
 then delete the old one. Nothing is down in between, because both work until you remove one.</small></p>
 
+<h2>http-nu</h2>
+{% if http_nu %}
+<p>This site runs http-nu <strong>{{ http_nu }}</strong>, {% if http_nu_pinned %}pinned in its <code>cross-stream.nuon</code>{% else %}this VM's default{% endif %}.{% if http_nu_carried %} This VM carries {{ http_nu_carried }}.{% endif %}</p>
+<p><small>To move at your own pace, pin a version: <code>{ http_nu: "0.19.0" }</code>. Without a pin, a site runs the default, which moves only once every site has moved. Stock plugins come with the version you pick; a plugin committed in your repo has to be built for that version's nushell.</small></p>
+{% else %}
+<p><small>This VM has one http-nu, so there is nothing to pin yet.</small></p>
+{% endif %}
+
 <h2>Features</h2>
 {% if store or services or datastar %}
 <ul>
@@ -104,7 +112,7 @@ then delete the old one. Nothing is down in between, because both work until you
 {% else %}
 <p><small>None enabled. Add a <code>cross-stream.nuon</code> at your repo root, e.g. <code>{ store: true }</code>, to turn on the embedded store, services, datastar, or nushell plugins. Everything is off by default.</small></p>
 {% endif %}
-<p><small><code>store</code>, <code>services</code> and <code>datastar</code> are booleans; <code>plugins</code> is a list of stock plugin names or paths to plugin binaries committed in your repo. Those four keys are the only ones accepted. Unknown keys and malformed nuon are rejected at push time, with the reason in your <code>git push</code> output. See the <a href="/docs">site guide</a>.</small></p>
+<p><small><code>store</code>, <code>services</code> and <code>datastar</code> are booleans; <code>plugins</code> is a list of stock plugin names or paths to plugin binaries committed in your repo; <code>http_nu</code> pins a version. Those five keys are the only ones accepted. Unknown keys and malformed nuon are rejected at push time, with the reason in your <code>git push</code> output. See the <a href="/docs">site guide</a>.</small></p>
 
 <h2>Writing your site</h2>
 <p>The <a href="/docs">site guide</a> covers what to expect: which paths survive a deploy and which are wiped, where a SQLite file belongs, the manifest keys in full, and what to build against if you want to commit a static binary.</p>
