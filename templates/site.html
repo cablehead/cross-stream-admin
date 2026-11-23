@@ -45,7 +45,7 @@ the page only.</small></p>
 <h2>Push to deploy</h2>
 <p><strong>Copy one of these now.</strong> <small>The key in the URL is shown this once and is
 not recoverable: only its hash is kept, so nobody, including this page, can read it back. Lose
-it and you add a new key on <a href="/keys">Push keys</a>.</small></p>
+it and you add a new key on <a href="/keys">Keys</a>.</small></p>
 
 <p><small>A project that has never pushed here (it needs a <code>serve.nu</code> at its
 root):</small></p>
@@ -62,10 +62,10 @@ root):</small></p>
 <p><small>Once that pushes, delete the key it replaced. Each push redeploys.</small></p>
 {% endif %}
 
-<h2>Push keys</h2>
+<h2>Keys</h2>
 {% if keys %}
 <table>
-  <thead><tr><th>name</th><th>pushes to</th><th>ends</th></tr></thead>
+  <thead><tr><th>name</th><th>sites</th><th>ends</th></tr></thead>
   <tbody>
   {% for k in keys %}
     <tr>
@@ -77,10 +77,10 @@ root):</small></p>
   </tbody>
 </table>
 {% else %}
-<p><small>No key can push here yet.</small></p>
+<p><small>No key reaches this site yet.</small></p>
 {% endif %}
-<p><small>The keys that can push to this site. Add, change or remove keys on
-<a href="/keys">Push keys</a>.</small></p>
+<p><small>The keys that reach this site: they can push to it and read its logs. Add, change or
+remove keys on <a href="/keys">Keys</a>.</small></p>
 
 <h2>http-nu</h2>
 {% if http_nu %}

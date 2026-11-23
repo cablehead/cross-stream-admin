@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ key.name }}, customerenv admin{% endblock %}
 {% block body %}
-<p><small><a href="/keys">Push keys</a> /</small></p>
+<p><small><a href="/keys">Keys</a> /</small></p>
 <h1>{{ key.name }} <code>&hellip;{{ key.suffix }}</code></h1>
 
 {% if secret %}
 <p><strong>Copy this key now.</strong> <small>It is shown this once and is not recoverable: only
-its hash is kept, so nobody, including this page, can read it back. It pushes nowhere until you
+its hash is kept, so nobody, including this page, can read it back. It reaches no site until you
 pick its sites below.</small></p>
 <p><small>The remote for a site, with the site's name in place of <code>&lt;site&gt;</code>:</small></p>
 <figure>
@@ -22,7 +22,7 @@ pick its sites below.</small></p>
     <label><input type=radio name=scope value=some{% if not key.every %} checked{% endif %}> Only the sites ticked below</label>
   </fieldset>
 
-  <h2>Can push to ({{ key.sites | length }})</h2>
+  <h2>Sites ({{ key.sites | length }})</h2>
   {% if key.sites %}
   <fieldset>
   {% for s in key.sites %}<label><input type=checkbox name=site value="{{ s }}" checked> {{ s }}</label>{% endfor %}
