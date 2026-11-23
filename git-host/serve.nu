@@ -4,9 +4,9 @@
 # protocol; we shell out to git-http-backend for the actual pack negotiation and stream
 # its binary CGI output back out, splitting the CGI header block from the packfile body.
 #
-# Push auth: HTTP Basic. The per-site token (sent as the Basic username OR password) is
-# looked up in tokens.json -> the label it may push to. A token may only touch its label.
-#
+# Push auth: HTTP Basic. The token (sent as the Basic username OR password) is looked up by
+# its hash; the key it belongs to names the sites it may push to, or every site.
+
 # Run standalone for the scratch proof:
 #   http-nu 127.0.0.1:<port> /home/app/git-host/serve.nu
 # Eventually: bound to /run/sites/git.sock as the reserved `git` label.
@@ -18,18 +18,28 @@ const KEY_TOPIC = "site.token"
 
 # A push key is one frame on `site.token`, appended by the admin over this process's own
 # store socket. Its meta carries everything about the key except the key:
-#   {label, name, hash, suffix, created}
+#   {name, hash, suffix, created, every, sites}
 # `hash` is sha256 of the secret. The secret itself is never written down, so this store,
-# a backup of it, or a screenshot of the admin page cannot be pushed with. A label may have
-# any number of keys, which is what makes rolling one a non-event: add, deploy, remove.
+# a backup of it, or a screenshot of the admin page cannot be pushed with. `every: true` lets
+# the key push to every site, including ones made after it; otherwise `sites` lists the labels
+# it may push to. A key minted when keys belonged to one site carries `label` instead, which
+# reads as `sites: [label]`. Any number of keys may reach a site, which is what makes rolling
+# one a non-event: add, deploy, remove.
 #
 # The `try` matters. `.cat` only exists when http-nu is run with --store, so a tenant whose
 # unit predates that flag falls back to the legacy map below instead of failing to serve.
+def key-scope [meta: record] {
+  if ($meta.every? | default false) { {every: true, sites: []} } else {
+    let legacy = (if ($meta.label? | is-empty) { [] } else { [$meta.label] })
+    {every: false, sites: ($meta.sites? | default $legacy)}
+  }
+}
+
 def load-keys [] {
   try {
     .cat --topic $KEY_TOPIC
       | where {|f| ($f.meta?.hash? | default "" | is-not-empty) }
-      | each {|f| {label: $f.meta.label, hash: $f.meta.hash} }
+      | each {|f| {hash: $f.meta.hash} | merge (key-scope $f.meta) }
   } catch { [] }
 }
 
@@ -37,12 +47,15 @@ def load-keys [] {
 # secret. Read-only here, and only until every tenant has run migrate-tokens.nu.
 def load-tokens [] { if ($TOKENS | path exists) { open --raw $TOKENS | from json } else { {} } }
 
-# The label a single presented secret may push to, or null. Hashed lookup first, then the
-# legacy plaintext map.
-def label-for-secret [secret: string, keys: list] {
+# Where a single presented secret may push, as {every, sites}, or null. Hashed lookup first,
+# then the legacy plaintext map.
+def scope-for-secret [secret: string, keys: list] {
   if ($secret | is-empty) { null } else {
-    let hit = ($keys | where hash == ($secret | hash sha256) | get -o 0.label)
-    if ($hit | is-not-empty) { $hit } else { (load-tokens) | get -o $secret }
+    let hit = ($keys | where hash == ($secret | hash sha256) | get -o 0)
+    if ($hit | is-not-empty) { $hit | select every sites } else {
+      let label = ((load-tokens) | get -o $secret)
+      if ($label | is-empty) { null } else { {every: false, sites: [$label]} }
+    }
   }
 }
 
@@ -57,18 +70,17 @@ def path-label [path: string] {
   $seg | str replace --regex '\.git$' ''
 }
 
-# The label a Basic-auth token is allowed to push to, or null. The token may arrive as the
-# Basic username (https://<token>@host) or the password (https://x:<token>@host).
-def token-label [req: record] {
+# Where the Basic-auth token may push, one scope per credential that matched. The token may
+# arrive as the Basic username (https://<token>@host) or the password (https://x:<token>@host).
+def token-scopes [req: record] {
   let h = ($req.headers | get -o authorization | default "")
-  if not ($h | str starts-with "Basic ") { return null }
+  if not ($h | str starts-with "Basic ") { return [] }
   let decoded = (try { $h | str replace 'Basic ' '' | decode base64 | decode utf-8 } catch { "" })
   let parts = ($decoded | split row ':')
   let keys = (load-keys)
   [($parts.0? | default "") ($parts.1? | default "")]
-    | each {|c| label-for-secret $c $keys }
-    | where {|l| ($l | is-not-empty) }
-    | get -o 0
+    | each {|c| scope-for-secret $c $keys }
+    | where {|s| $s != null }
 }
 
 # Split git-http-backend's CGI output: a \r\n-delimited header block, a \r\n\r\n blank
@@ -99,10 +111,10 @@ def split-cgi [raw: binary] {
   if ($label | is-empty) {
     resp "not found" 404 {}
   } else {
-    let allowed = (token-label $req)
-    if ($allowed == null) {
+    let scopes = (token-scopes $req)
+    if ($scopes | is-empty) {
       resp "authentication required" 401 {"WWW-Authenticate": 'Basic realm="git"'}
-    } else if ($allowed != $label) {
+    } else if not ($scopes | any {|s| $s.every or ($label in $s.sites) }) {
       resp $"token not authorized for label ($label)" 403 {}
     } else if not ($"($GIT_ROOT)/($label).git" | path exists) {
       resp $"no such repo: ($label).git" 404 {}

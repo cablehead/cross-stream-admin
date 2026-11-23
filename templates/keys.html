@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}push keys, customerenv admin{% endblock %}
+{% block body %}
+<h1>Push keys</h1>
+{% if keys %}
+<table>
+  <thead><tr><th>name</th><th>pushes to</th><th>ends</th><th>added</th></tr></thead>
+  <tbody>
+  {% for k in keys %}
+    <tr>
+      <td><a href="/k/{{ k.id }}">{{ k.name }}</a></td>
+      <td>{{ k.reach }}</td>
+      <td><code>&hellip;{{ k.suffix }}</code></td>
+      <td>{{ k.created }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p><small>No keys yet. Nothing can be pushed until you add one.</small></p>
+{% endif %}
+
+<form method=post action=/keys/create>
+  <input name=name placeholder="laptop" aria-label="key name" required>
+  <button>add key</button>
+</form>
+<p><small>A key pushes to every site, or to the sites you pick on its page. Name keys for where
+they live, so the last few characters tell you which is which. To roll one: add a key, switch
+your remotes over, then delete the old one. Nothing is down in between, because both work until
+you remove one.</small></p>
+{% endblock %}

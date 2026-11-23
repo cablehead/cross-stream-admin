@@ -14,9 +14,12 @@ git-push path it offers tenants.
   against the broker's public key. The app checks the token's `sub` (the user's Discord ID)
   against a per-VM allowlist, then sets its own session. One Discord app serves every tenant;
   each tenant VM holds only a public key and a list.
-- **Create site.** Pick a label. The app mints a per-site push token, creates a bare repo at
-  `/home/app/git/<label>.git` with the deploy hooks, and hands back the exact `git remote add`
-  and `git push` lines.
+- **Create site.** Pick a label. The app mints a push key for that site, creates a bare repo
+  at `/home/app/git/<label>.git` with the deploy hooks, and hands back the exact
+  `git remote add` and `git push` lines.
+- **Push keys** (`/keys`). Keys belong to the account. Each one pushes to every site,
+  including sites made after it, or to the sites ticked on its page (`/k/<id>`). A site's page
+  lists the keys that can push to it.
 - **Push to deploy.** The tenant pushes to `git.<tenant>.cross.stream/<label>.git`. The
   [git-host](git-host/) gateway checks the tree out
   into `/home/app/sites/<label>/repo` and restarts `site@<label>`. Each push redeploys.

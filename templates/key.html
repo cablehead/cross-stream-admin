@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ key.name }}, customerenv admin{% endblock %}
+{% block body %}
+<p><small><a href="/keys">Push keys</a> /</small></p>
+<h1>{{ key.name }} <code>&hellip;{{ key.suffix }}</code></h1>
+
+{% if secret %}
+<p><strong>Copy this key now.</strong> <small>It is shown this once and is not recoverable: only
+its hash is kept, so nobody, including this page, can read it back. It pushes nowhere until you
+pick its sites below.</small></p>
+<p><small>The remote for a site, with the site's name in place of <code>&lt;site&gt;</code>:</small></p>
+<figure>
+  <button type=button data-copy title="Copy" aria-label="Copy to clipboard"><svg width=15 height=15 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=9 y=9 width=13 height=13 rx=2></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><svg width=15 height=15 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M20 6 9 17l-5-5"></path></svg></button>
+  <pre><code>{{ remote }}</code></pre>
+</figure>
+{% endif %}
+
+<form method=post action=/keys/update data-signals:q="''">
+  <input type=hidden name=id value="{{ key.id }}">
+  <fieldset>
+    <label><input type=radio name=scope value=every{% if key.every %} checked{% endif %}> Every site, including ones you make later</label>
+    <label><input type=radio name=scope value=some{% if not key.every %} checked{% endif %}> Only the sites ticked below</label>
+  </fieldset>
+
+  <h2>Can push to ({{ key.sites | length }})</h2>
+  {% if key.sites %}
+  <fieldset>
+  {% for s in key.sites %}<label><input type=checkbox name=site value="{{ s }}" checked> {{ s }}</label>{% endfor %}
+  </fieldset>
+  {% else %}
+  <p><small>{% if key.every %}Every site, so none are ticked.{% else %}No site yet.{% endif %}</small></p>
+  {% endif %}
+
+  {% if others %}
+  <h2>Add sites</h2>
+  <p><input data-bind:q placeholder="part of a site's name" aria-label="find sites"> <small>{{ others | length }} of {{ total }} sites not ticked</small></p>
+  <fieldset>
+  {% for s in others %}<label data-show="$q.trim() !== '' &amp;&amp; '{{ s }}'.includes($q.trim().toLowerCase())" style="display: none"><input type=checkbox name=site value="{{ s }}"> {{ s }}</label>{% endfor %}
+  </fieldset>
+  {% endif %}
+
+  <p><button>save</button></p>
+</form>
+
+<form method=post action=/keys/delete>
+  <input type=hidden name=id value="{{ key.id }}">
+  <button>delete key</button>
+</form>
+<script type=module src="{{ datastar_js | safe }}"></script>
+{% endblock %}
