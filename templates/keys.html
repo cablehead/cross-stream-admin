@@ -4,7 +4,7 @@
 <h1>Push keys</h1>
 {% if keys %}
 <table>
-  <thead><tr><th>name</th><th>pushes to</th><th>ends</th><th>added</th></tr></thead>
+  <thead><tr><th>name</th><th>pushes to</th><th>ends</th><th>added</th><th></th></tr></thead>
   <tbody>
   {% for k in keys %}
     <tr>
@@ -12,6 +12,10 @@
       <td>{{ k.reach }}</td>
       <td><code>&hellip;{{ k.suffix }}</code></td>
       <td>{{ k.created }}</td>
+      <td><form method=post action=/keys/delete>
+        <input type=hidden name=id value="{{ k.id }}">
+        <button>delete</button>
+      </form></td>
     </tr>
   {% endfor %}
   </tbody>
