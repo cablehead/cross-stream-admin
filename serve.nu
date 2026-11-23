@@ -697,7 +697,7 @@ def api-logs [label: string, n: int, follow: bool] {
 def api [req: record, cfg: record] {
   let scopes = (key-scopes $req)
   if ($scopes | is-empty) {
-    return (resp "a push key is needed, as with git: curl -u \"$KEY:\" ...\n" 401 {"WWW-Authenticate": 'Basic realm="api"'})
+    return (resp "a key is needed, as with git: curl -u \"$KEY:\" ...\n" 401 {"WWW-Authenticate": 'Basic realm="api"'})
   }
   let sites = (key-sites $scopes)
   let parts = ($req.path | str replace --regex '^/api/' '' | split row '/' | where {|p| $p != "" })

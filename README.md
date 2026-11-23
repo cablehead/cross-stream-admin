@@ -17,9 +17,10 @@ git-push path it offers tenants.
 - **Create site.** Pick a label. The app mints a push key for that site, creates a bare repo
   at `/home/app/git/<label>.git` with the deploy hooks, and hands back the exact
   `git remote add` and `git push` lines.
-- **Push keys** (`/keys`). Keys belong to the account. Each one pushes to every site,
-  including sites made after it, or to the sites ticked on its page (`/k/<id>`). A site's page
-  lists the keys that can push to it.
+- **Keys** (`/keys`). Keys belong to the account. A key lets git push to its sites, and lets
+  a script list them and read their logs through `/api/sites`. It reaches every site,
+  including sites made after it, or the sites ticked on its page (`/k/<id>`). A site's page
+  lists the keys that reach it.
 - **Push to deploy.** The tenant pushes to `git.<tenant>.cross.stream/<label>.git`. The
   [git-host](git-host/) gateway checks the tree out
   into `/home/app/sites/<label>/repo` and restarts `site@<label>`. Each push redeploys.
