@@ -20,9 +20,10 @@ The gateway runs as its own site actor on the reserved `git` label. `git-host.se
 
 `serve.nu` is an [http-nu](https://http-nu.cross.stream) handler that speaks git's smart-HTTP
 protocol by gatewaying to `git-http-backend` (CGI). Bare repos live at
-`/home/app/git/<label>.git`. Push auth is HTTP Basic: a per-site token (sent as the Basic
-username or password) is mapped to its label in `/home/app/git/tokens.json`, and a token may
-only push to its own label.
+`/home/app/git/<label>.git`. Push auth is HTTP Basic: the key (sent as the Basic username or
+password) is looked up by its hash in the store, and the key names the sites it may push to,
+or every site. A key from before keys could reach more than one site names one `label`, and
+pushes to that site alone.
 
 Each bare repo carries two hooks, installed by cross-stream-admin's "create site":
 

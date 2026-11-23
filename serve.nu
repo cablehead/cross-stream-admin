@@ -2,7 +2,7 @@
 # broker's public key + an allowlist. Runs as root (see deploy/admin.service) so it can drive
 # git + systemctl; the sites it manages stay DynamicUser-sandboxed (see deploy/site@.service).
 #
-# Deploy model: PUSH-TO-DEPLOY. "Create site" mints a per-site token + a bare repo at
+# Deploy model: PUSH-TO-DEPLOY. "Create site" mints a push key for the site + a bare repo at
 # /home/app/git/<label>.git with a post-receive hook; each site's push commands live on its
 # own page (/s/<label>). The reserved `git` label (git-host.service on /run/sites/git.sock)
 # receives the push, checks the tree out into /home/app/sites/<label>/repo and restarts it.
@@ -52,11 +52,15 @@ def load-registry [] { if ($REGISTRY | path exists) { open $REGISTRY } else { []
 def load-tokens [] { if ($TOKENS | path exists) { open --raw $TOKENS | from json } else { {} } }
 
 # --- push keys, over git-host's store socket -------------------------------------------
-# A key is one frame on `site.token`. Its meta holds label, name, hash, suffix, created --
-# everything except the secret, which is hashed on the way in and never stored. So the admin
-# cannot show you a key after it is minted, only the moment it is made. That is what a
-# credential should do, and it is why there is no "rotate" verb: a label may hold any number
-# of keys, so rolling one is add, deploy, remove.
+# A key is one frame on `site.token`. Its meta holds name, hash, suffix, created, and where it
+# may push: `every: true` for every site, including ones made later, or `sites`, a list of
+# labels. The secret is hashed on the way in and never stored, so the admin cannot show you a
+# key after it is minted, only the moment it is made. That is what a credential should do, and
+# it is why there is no "rotate" verb: any number of keys may reach a site, so rolling one is
+# add, deploy, remove. Keys belong to the account, not to a site: /keys lists them all.
+#
+# A key minted when keys belonged to one site carries `label` instead of `sites`; it reads as
+# a key for that one site, so nothing needs migrating.
 
 def store-cat [topic: string] {
   let r = (^curl -s --unix-socket $STORE_SOCK $"http://localhost/?topic=($topic)" | complete)
@@ -75,29 +79,68 @@ def store-remove [id: string] {
   (^curl -s --unix-socket $STORE_SOCK -X DELETE $"http://localhost/($id)" | complete)
 }
 
-# Keys for one label, newest first. The id is the frame id, which is what a delete names.
-def keys-for [label: string] {
+def key-scope [meta: record] {
+  if ($meta.every? | default false) { {every: true, sites: []} } else {
+    let legacy = (if ($meta.label? | is-empty) { [] } else { [$meta.label] })
+    {every: false, sites: ($meta.sites? | default $legacy | sort)}
+  }
+}
+
+# Where a key pushes, in a few words: the table cell on /keys.
+def reach [k: record] {
+  if $k.every { "every site" } else {
+    match ($k.sites | length) {
+      0 => "no site yet"
+      1 => ($k.sites | first)
+      $n => $"($n) sites"
+    }
+  }
+}
+
+# Every key, newest first. The id is the frame id, which is what a page and a delete name.
+def all-keys [] {
   store-cat $KEY_TOPIC
-    | where {|f| ($f.meta?.label? | default "") == $label }
     | each {|f| {
         id: $f.id
         name: ($f.meta?.name? | default "unnamed")
         suffix: ($f.meta?.suffix? | default "")
         created: ($f.meta?.created? | default "")
-      } }
+      } | merge (key-scope ($f.meta? | default {})) }
+    | each {|k| $k | insert reach (reach $k) }
     | sort-by id --reverse
 }
 
-# Mint a key for a label and return the secret. The caller shows it once; we keep the hash.
-def mint-key [label: string, name: string] {
+# The keys that can push to one site.
+def keys-for [label: string] { all-keys | where {|k| $k.every or ($label in $k.sites) } }
+
+# Mint a key and return {id, secret}, or null. The caller shows the secret once; we keep the
+# hash.
+def mint-key [name: string, every: bool, sites: list] {
   let secret = (random chars --length 32)
   let r = (store-append $KEY_TOPIC {
-    label: $label, name: $name
+    name: $name, every: $every, sites: $sites
     hash: ($secret | hash sha256)
     suffix: ($secret | str substring (-6..))
     created: (date now | format date "%Y-%m-%d")
   })
-  if $r.exit_code != 0 { null } else { $secret }
+  let id = (try { $r.stdout | from json | get id } catch { null })
+  if ($r.exit_code != 0) or ($id | is-empty) { null } else { {id: $id, secret: $secret} }
+}
+
+# Change where a key pushes. Frames don't change, so this appends the key again with its new
+# sites, then removes the old frame. In between, both frames hold the same hash and the key
+# reaches the sites of either, never a site neither names. Returns the new frame's id, or null.
+def rescope-key [id: string, every: bool, sites: list] {
+  let old = (store-cat $KEY_TOPIC | where id == $id | get -o 0)
+  if ($old | is-empty) { null } else {
+    let meta = ($old.meta | reject -o label | merge {every: $every, sites: $sites})
+    let r = (store-append $KEY_TOPIC $meta)
+    let new = (try { $r.stdout | from json | get id } catch { null })
+    if ($r.exit_code != 0) or ($new | is-empty) { null } else {
+      store-remove $id
+      $new
+    }
+  }
 }
 
 def push-remote [token: string, tenant: string, label: string] {
@@ -121,6 +164,19 @@ def parse-form [body: string] {
     }
   }
 }
+
+# A form as a list of {k, v}, for fields that repeat (a ticked checkbox per site).
+def form-pairs [body: string] {
+  if ($body | is-empty) { [] } else {
+    $body | split row "&" | each {|pair|
+      let kv = ($pair | split row "=")
+      {k: $kv.0, v: (($kv.1? | default "") | str replace --all "+" " " | url decode)}
+    }
+  }
+}
+
+def valid-key-id [id: string] { $id =~ '^[0-9a-z]{25,32}$' }
+def valid-key-name [name: string] { $name =~ '^[\w][\w .-]{0,31}$' }
 
 def valid-label [label: string] {
   ($label =~ '^[a-z0-9][a-z0-9-]{0,31}$') and ($label not-in ["admin" "www" "placeholder" "git"])
@@ -289,6 +345,28 @@ def site-page [label: string, user: string, cfg: record, tab: string, new_key: s
   }
 }
 
+# The account's push keys, one row per key.
+def keys-page [user: string, cfg: record] {
+  {tenant: $cfg.tenant, user: $user, keys: (all-keys)} | .mj $"($TPL)/keys.html"
+}
+
+# One key: where it pushes, and the sites it could. `secret` is set only on the response that
+# just minted it, the one moment it can be shown.
+def key-page [id: string, user: string, cfg: record, secret: string = ""] {
+  let k = (all-keys | where id == $id | get -o 0)
+  if ($k | is-empty) { resp "no such key" 404 {} } else {
+    let labels = (load-registry | get -o label | default [] | sort)
+    {
+      tenant: $cfg.tenant, user: $user, key: $k
+      others: ($labels | where {|l| $l not-in $k.sites })
+      total: ($labels | length)
+      secret: $secret
+      remote: (if ($secret | is-empty) { "" } else { push-remote $secret $cfg.tenant "<site>" })
+      datastar_js: $DATASTAR_JS_PATH
+    } | .mj $"($TPL)/key.html"
+  }
+}
+
 # The tenant-facing guide, rendered straight from docs/site-guide.md through `.md`. The markdown
 # is the single source: the site page links here rather than restating it, so there's one copy to
 # keep true.
@@ -335,11 +413,11 @@ def do-create [label: string, reg: list, cfg: record, user: string] {
       ^git -C $bare config core.hooksPath $HOOKS_DIR
       ^chown -R app:app $bare
       $reg | append {label: $label, created: (date now | format date "%Y-%m-%d")} | save --force $REGISTRY
-      let secret = (mint-key $label "initial")
-      if ($secret | is-empty) {
-        resp $"site ($label) created, but the key store did not answer -- add a key from its page" 500 {}
+      let minted = (mint-key "initial" false [$label])
+      if ($minted | is-empty) {
+        resp $"site ($label) created, but the key store did not answer -- add a key on /keys" 500 {}
       } else {
-        site-page $label $user $cfg "detail" $secret
+        site-page $label $user $cfg "detail" $minted.secret
       }
     }
   }
@@ -573,6 +651,11 @@ def do-restart [label: string] {
       # gated areas that aren't a single fixed path: the gallery and per-site pages
       if ($req.path | str starts-with "/screenshots") {
         if ($sess | is-empty) { resp "" 302 {Location: "/"} } else if ($req.path == "/screenshots") { screenshots-page (who-of $sess) $cfg } else { serve-file $SHOTS "/screenshots/" $req.path "image/png" }
+      } else if ($req.path | str starts-with "/k/") {
+        if ($sess | is-empty) { resp "" 302 {Location: "/"} } else {
+          let id = ($req.path | str replace '/k/' '')
+          if not (valid-key-id $id) { resp "bad key id" 400 {} } else { key-page $id (who-of $sess) $cfg }
+        }
       } else if ($req.path | str starts-with "/s/") {
         if ($sess | is-empty) { resp "" 302 {Location: "/"} } else {
           let parts = ($req.path | str replace --regex '^/s/' '' | split row '/' | where {|p| $p != ""})
@@ -622,22 +705,37 @@ def do-restart [label: string] {
               if not (valid-label $label) { resp "invalid label, use a-z 0-9 - (<=32), not a reserved name" 400 {} } else { do-create $label (load-registry) $cfg (who-of $sess) }
             }
           }
-          # Add a key to an existing site. Renders the page with the secret rather than
-          # redirecting, for the same reason do-create does: a secret does not belong in a URL.
+          "/keys" => {
+            if ($sess | is-empty) { resp "" 302 {Location: "/"} } else { keys-page (who-of $sess) $cfg }
+          }
+          # Add a key. It starts out pushing nowhere; its page, rendered with the secret shown
+          # once, is where you pick its sites. Rendered rather than redirected, for the same
+          # reason do-create is: a secret does not belong in a URL.
           "/keys/create" => {
             if ($sess | is-empty) { resp "unauthorized" 401 {} } else if ($req.method != "POST") { resp "method not allowed" 405 {} } else {
-              let f = (parse-form $body)
-              let label = ($f.label? | default "" | str trim)
-              let name = ($f.name? | default "" | str trim)
-              let reg = (load-registry)
-              if not ($label in ($reg | get -o label | default [])) {
-                resp "no such site" 404 {}
-              } else if not ($name =~ '^[\w][\w .-]{0,31}$') {
+              let name = ((parse-form $body).name? | default "" | str trim)
+              if not (valid-key-name $name) {
                 resp "name it something, up to 32 of letters, digits, space, dot or dash" 400 {}
               } else {
-                let secret = (mint-key $label $name)
-                if ($secret | is-empty) { resp "the key store did not answer" 500 {} } else {
-                  site-page $label (who-of $sess) $cfg "detail" $secret
+                let minted = (mint-key $name false [])
+                if ($minted | is-empty) { resp "the key store did not answer" 500 {} } else {
+                  key-page $minted.id (who-of $sess) $cfg $minted.secret
+                }
+              }
+            }
+          }
+          # Set where a key pushes: every site, or the ticked ones. Only sites that exist count.
+          "/keys/update" => {
+            if ($sess | is-empty) { resp "unauthorized" 401 {} } else if ($req.method != "POST") { resp "method not allowed" 405 {} } else {
+              let f = (form-pairs $body)
+              let id = ($f | where k == "id" | get -o 0.v | default "")
+              let every = (($f | where k == "scope" | get -o 0.v | default "") == "every")
+              let labels = (load-registry | get -o label | default [])
+              let sites = ($f | where k == "site" | get v | where {|l| $l in $labels } | uniq | sort)
+              if not (valid-key-id $id) { resp "invalid key id" 400 {} } else {
+                let new = (rescope-key $id $every (if $every { [] } else { $sites }))
+                if ($new | is-empty) { resp "no such key, or the key store did not answer" 404 {} } else {
+                  resp "" 302 {Location: $"/k/($new)"}
                 }
               }
             }
@@ -646,17 +744,12 @@ def do-restart [label: string] {
           # flight, so this one redirects.
           "/keys/delete" => {
             if ($sess | is-empty) { resp "unauthorized" 401 {} } else if ($req.method != "POST") { resp "method not allowed" 405 {} } else {
-              let f = (parse-form $body)
-              let label = ($f.label? | default "" | str trim)
-              let id = ($f.id? | default "" | str trim)
-              if not (valid-label $label) { resp "invalid label" 400 {} } else if not ($id =~ '^[0-9a-z]{25,32}$') {
-                resp "invalid key id" 400 {}
-              } else if not ($id in (keys-for $label | get -o id | default [])) {
-                # a key may only be deleted through the page of the site it belongs to
-                resp "no such key for this site" 404 {}
+              let id = ((parse-form $body).id? | default "" | str trim)
+              if not (valid-key-id $id) { resp "invalid key id" 400 {} } else if not ($id in (all-keys | get -o id | default [])) {
+                resp "no such key" 404 {}
               } else {
                 store-remove $id
-                resp "" 302 {Location: $"/s/($label)"}
+                resp "" 302 {Location: "/keys"}
               }
             }
           }

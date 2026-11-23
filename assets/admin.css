@@ -143,3 +143,9 @@ article > nav a[aria-current] { border-bottom-color: currentColor; }
   .log > li, .log summary { grid-template-columns: 4.4em 2.6em minmax(0, 1fr) 2.4em 3.2em; }
   .log small:last-of-type, .log samp { display: none; }
 }
+
+/* a fieldset is a wrapping row of choices: the radios and the site checkboxes on a key's page.
+   A form holding fieldsets is a page section, not a control row, so it stacks. */
+form:has(fieldset) { display: block; }
+fieldset { border: 0; padding: 0; margin: 0 0 var(--size-1); display: flex; flex-wrap: wrap; gap: var(--size--1) var(--size-1); }
+fieldset label { display: inline-flex; align-items: center; gap: var(--size--2); white-space: nowrap; }

@@ -45,7 +45,7 @@ the page only.</small></p>
 <h2>Push to deploy</h2>
 <p><strong>Copy one of these now.</strong> <small>The key in the URL is shown this once and is
 not recoverable: only its hash is kept, so nobody, including this page, can read it back. Lose
-it and you add a new key below.</small></p>
+it and you add a new key on <a href="/keys">Push keys</a>.</small></p>
 
 <p><small>A project that has never pushed here (it needs a <code>serve.nu</code> at its
 root):</small></p>
@@ -65,34 +65,22 @@ root):</small></p>
 <h2>Push keys</h2>
 {% if keys %}
 <table>
-  <thead><tr><th>name</th><th>ends</th><th>added</th><th></th></tr></thead>
+  <thead><tr><th>name</th><th>pushes to</th><th>ends</th></tr></thead>
   <tbody>
   {% for k in keys %}
     <tr>
-      <td>{{ k.name }}</td>
+      <td><a href="/k/{{ k.id }}">{{ k.name }}</a></td>
+      <td>{{ k.reach }}</td>
       <td><code>&hellip;{{ k.suffix }}</code></td>
-      <td>{{ k.created }}</td>
-      <td><form method=post action=/keys/delete>
-        <input type=hidden name=label value="{{ label }}">
-        <input type=hidden name=id value="{{ k.id }}">
-        <button>delete</button>
-      </form></td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
 {% else %}
-<p><small>No keys. This site cannot be pushed to until you add one.</small></p>
+<p><small>No key can push here yet.</small></p>
 {% endif %}
-
-<form method=post action=/keys/create>
-  <input type=hidden name=label value="{{ label }}">
-  <input name=name placeholder="laptop" aria-label="key name" required>
-  <button>add key</button>
-</form>
-<p><small>Every key can push to this site and no other. Name them for where they live, so the
-last few characters tell you which is which. To roll one: add a key, switch your remote over,
-then delete the old one. Nothing is down in between, because both work until you remove one.</small></p>
+<p><small>The keys that can push to this site. Add, change or remove keys on
+<a href="/keys">Push keys</a>.</small></p>
 
 <h2>http-nu</h2>
 {% if http_nu %}
