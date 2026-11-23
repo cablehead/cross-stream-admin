@@ -3,23 +3,57 @@
 {% block body %}
 <h1>Push keys</h1>
 {% if keys %}
-<table>
-  <thead><tr><th>name</th><th>pushes to</th><th>ends</th><th>added</th><th></th></tr></thead>
+<p><input type=search id=key-filter placeholder="filter by site or name" aria-label="filter keys by site or name" autocomplete=off>
+  <small id=key-count>{{ keys | length }} keys</small></p>
+<form method=post action=/keys/delete id=key-list>
+<table class=keys>
+  <thead><tr><th><input type=checkbox id=key-all aria-label="tick every key shown"></th><th>pushes to</th><th>name</th><th>ends</th><th>added</th></tr></thead>
   <tbody>
   {% for k in keys %}
-    <tr>
-      <td><a href="/k/{{ k.id }}">{{ k.name }}</a></td>
+    <tr data-find="{{ k.reach | lower }} {{ k.name | lower }}">
+      <td><input type=checkbox name=id value="{{ k.id }}" aria-label="tick {{ k.name }}, {{ k.reach }}"></td>
       <td>{{ k.reach }}</td>
+      <td><a href="/k/{{ k.id }}">{{ k.name }}</a></td>
       <td><code>&hellip;{{ k.suffix }}</code></td>
       <td>{{ k.created }}</td>
-      <td><form method=post action=/keys/delete>
-        <input type=hidden name=id value="{{ k.id }}">
-        <button>delete</button>
-      </form></td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
+<p><button id=key-delete disabled>delete ticked keys</button></p>
+</form>
+<style>
+  table.keys td, table.keys th { padding-block: .25rem; }
+  table.keys td:first-child, table.keys th:first-child { width: 1.5rem; }
+</style>
+<script>
+(() => {
+  const list = document.getElementById('key-list'), all = document.getElementById('key-all'),
+        del = document.getElementById('key-delete'), filter = document.getElementById('key-filter'),
+        count = document.getElementById('key-count'), rows = [...list.querySelectorAll('tbody tr')];
+  const box = (r) => r.querySelector('input[name=id]');
+  const shown = () => rows.filter((r) => !r.hidden);
+  const sync = () => {
+    const n = rows.filter((r) => box(r).checked).length, s = shown();
+    del.disabled = n === 0;
+    del.textContent = n ? `delete ${n} ticked key${n === 1 ? '' : 's'}` : 'delete ticked keys';
+    all.checked = s.length > 0 && s.every((r) => box(r).checked);
+    count.textContent = s.length === rows.length ? `${rows.length} keys` : `${s.length} of ${rows.length} keys`;
+  };
+  filter.addEventListener('input', () => {
+    const q = filter.value.trim().toLowerCase();
+    rows.forEach((r) => { r.hidden = q !== '' && !r.dataset.find.includes(q); if (r.hidden) box(r).checked = false; });
+    sync();
+  });
+  all.addEventListener('change', () => { shown().forEach((r) => { box(r).checked = all.checked; }); sync(); });
+  list.addEventListener('change', (e) => { if (e.target.name === 'id') sync(); });
+  list.addEventListener('submit', (e) => {
+    const n = rows.filter((r) => box(r).checked).length;
+    if (!confirm(`Delete ${n} key${n === 1 ? '' : 's'}? Anything pushing with ${n === 1 ? 'it' : 'them'} stops working.`)) e.preventDefault();
+  });
+  sync();
+})();
+</script>
 {% else %}
 <p><small>No keys yet. Nothing can be pushed until you add one.</small></p>
 {% endif %}

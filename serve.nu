@@ -744,11 +744,13 @@ def do-restart [label: string] {
           # flight, so this one redirects.
           "/keys/delete" => {
             if ($sess | is-empty) { resp "unauthorized" 401 {} } else if ($req.method != "POST") { resp "method not allowed" 405 {} } else {
-              let id = ((parse-form $body).id? | default "" | str trim)
-              if not (valid-key-id $id) { resp "invalid key id" 400 {} } else if not ($id in (all-keys | get -o id | default [])) {
+              # One id from a key's own page, or every ticked one from the list.
+              let ids = (form-pairs $body | where k == "id" | get v | each {|i| $i | str trim } | uniq)
+              let known = (all-keys | get -o id | default [])
+              if ($ids | is-empty) or ($ids | any {|i| not (valid-key-id $i) }) { resp "invalid key id" 400 {} } else if ($ids | any {|i| $i not-in $known }) {
                 resp "no such key" 404 {}
               } else {
-                store-remove $id
+                $ids | each {|i| store-remove $i } | ignore
                 resp "" 302 {Location: "/keys"}
               }
             }
