@@ -632,6 +632,92 @@ def logs-stream [label: string] {
   | prepend $seed) | to sse
 }
 
+# --- the API: a push key does everything for its own sites. Besides pushing (git-host), it
+# lists their names and reads their logs, with the key as HTTP Basic auth, the same way git
+# sends it:
+#   curl -u "$KEY:" https://admin.<tenant>.cross.stream/api/sites
+#   curl -u "$KEY:" "https://admin.<tenant>.cross.stream/api/sites/<site>/logs?n=200"
+#   curl -u "$KEY:" "https://admin.<tenant>.cross.stream/api/sites/<site>/logs?follow=1"
+# A key sees only its own sites: every site, or the ones it lists. The check is git-host's: the
+# secret, as the Basic username or password, hashed and looked up on `site.token`.
+
+# Where the presented key reaches, one {every, sites} per credential that matched.
+def key-scopes [req: record] {
+  let h = ($req.headers | get -o authorization | default "")
+  if not ($h | str starts-with "Basic ") { return [] }
+  let decoded = (try { $h | str replace 'Basic ' '' | decode base64 | decode utf-8 } catch { "" })
+  let parts = ($decoded | split row ':')
+  let keys = (store-cat $KEY_TOPIC
+    | where {|f| ($f.meta?.hash? | default "" | is-not-empty) }
+    | each {|f| {hash: $f.meta.hash} | merge (key-scope $f.meta) })
+  [($parts.0? | default "") ($parts.1? | default "")]
+    | where {|c| $c != "" }
+    | each {|c| $keys | where hash == ($c | hash sha256) | get -o 0 }
+    | where {|k| $k != null }
+}
+
+# The sites a key reaches, of those this tenant has.
+def key-sites [scopes: list] {
+  let labels = (load-registry | get -o label | default [])
+  if ($scopes | any {|k| $k.every }) { $labels } else {
+    $scopes | each {|k| $k.sites } | flatten | uniq | where {|l| $l in $labels }
+  }
+}
+
+# One journal entry as the API gives it: when, and the line the site printed. A line that is
+# JSON (http-nu's own request log) is also given parsed, as `data`.
+def log-entry [e: record] {
+  let raw = (log-message $e)
+  let at = (try { ($e.__REALTIME_TIMESTAMP | into int) * 1000 | into datetime | format date "%+" } catch { "" })
+  let v = (log-parse $raw)
+  if $v == null { {at: $at, text: $raw} } else { {at: $at, text: $raw, data: $v} }
+}
+
+# A site's log as NDJSON, one entry a line: the last `n` lines, then, with follow, each new
+# one as it is written, for up to LOG_WINDOW seconds (the same cap as the log page, and for
+# the same reason: http-nu does not reap a tail when the client goes away).
+def api-logs [label: string, n: int, follow: bool] {
+  let unit = (unit-for $label)
+  let backlog = (^journalctl -u $unit -o json -n $n --no-pager | complete | get stdout | lines
+    | each {|l| try { $l | from json } catch { null } } | where {|e| $e != null })
+  let head = ($backlog | each {|e| (log-entry $e | to json -r) + "\n" })
+  let out = (if not $follow { $head | str join "" } else {
+    let cursor = ($backlog | last | get -o __CURSOR | default "")
+    let args = (if $cursor == "" { [] } else { [--after-cursor $cursor] })
+    ^timeout $"($LOG_WINDOW)" journalctl -u $unit -o json -f ...$args
+      | lines
+      | each {|l| try { (log-entry ($l | from json) | to json -r) + "\n" } catch { "" } }
+      | where {|l| $l != "" }
+      | prepend $head
+  })
+  $out | metadata set { merge {'http.response': {headers: {"content-type": "application/x-ndjson"}}} }
+}
+
+def api [req: record, cfg: record] {
+  let scopes = (key-scopes $req)
+  if ($scopes | is-empty) {
+    return (resp "a push key is needed, as with git: curl -u \"$KEY:\" ...\n" 401 {"WWW-Authenticate": 'Basic realm="api"'})
+  }
+  let sites = (key-sites $scopes)
+  let parts = ($req.path | str replace --regex '^/api/' '' | split row '/' | where {|p| $p != "" })
+  match $parts {
+    ["sites"] => {
+      $sites | each {|l| {
+        site: $l
+        remote: $"https://git.($cfg.tenant).cross.stream/($l).git"
+        url: $"https://($l).($cfg.tenant).cross.stream/"
+      } } | to json -r | metadata set { merge {'http.response': {headers: {"content-type": "application/json"}}} }
+    }
+    ["sites" $label "logs"] => {
+      if $label not-in $sites { resp $"this key does not reach ($label)\n" 403 {} } else {
+        let n = (try { $req.query.n? | default "200" | into int } catch { 200 } | [$in 1] | math max | [$in 5000] | math min)
+        api-logs $label $n (($req.query.follow? | default "") in ["1" "true"])
+      }
+    }
+    _ => { resp "not found\n" 404 {} }
+  }
+}
+
 def do-restart [label: string] {
   let r = (^systemctl restart $"site@($label)" | complete)
   if $r.exit_code != 0 { resp $"restart failed: ($r.stderr)" 500 {} } else { resp "" 302 {Location: $"/s/($label)"} }
@@ -646,6 +732,7 @@ def do-restart [label: string] {
     if ($cfg | is-empty) {
       "admin not configured" | metadata set { merge {'http.response': {status: 503}} }
     } else {
+      if ($req.path | str starts-with "/api/") { return (api $req $cfg) }
       let ss = (make-file-store $"($AUTH_DIR)/sessions")
       let sess = (load-session $req $ss)
       # gated areas that aren't a single fixed path: the gallery and per-site pages
