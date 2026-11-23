@@ -681,16 +681,17 @@ def api-logs [label: string, n: int, follow: bool] {
   let backlog = (^journalctl -u $unit -o json -n $n --no-pager | complete | get stdout | lines
     | each {|l| try { $l | from json } catch { null } } | where {|e| $e != null })
   let head = ($backlog | each {|e| (log-entry $e | to json -r) + "\n" })
-  let out = (if not $follow { $head | str join "" } else {
-    let cursor = ($backlog | last | get -o __CURSOR | default "")
-    let args = (if $cursor == "" { [] } else { [--after-cursor $cursor] })
-    ^timeout $"($LOG_WINDOW)" journalctl -u $unit -o json -f ...$args
-      | lines
-      | each {|l| try { (log-entry ($l | from json) | to json -r) + "\n" } catch { "" } }
-      | where {|l| $l != "" }
-      | prepend $head
-  })
-  $out | metadata set { merge {'http.response': {headers: {"content-type": "application/x-ndjson"}}} }
+  let ndjson = {'http.response': {headers: {"content-type": "application/x-ndjson"}}}
+  if not $follow { return ($head | str join "" | metadata set { merge $ndjson }) }
+  # Never `let` the tail: binding it collects it, and a tail only ends at the timeout.
+  let cursor = ($backlog | last | get -o __CURSOR | default "")
+  let args = (if $cursor == "" { [] } else { [--after-cursor $cursor] })
+  ^timeout $"($LOG_WINDOW)" journalctl -u $unit -o json -f ...$args
+    | lines
+    | each {|l| try { (log-entry ($l | from json) | to json -r) + "\n" } catch { "" } }
+    | where {|l| $l != "" }
+    | prepend $head
+    | metadata set { merge $ndjson }
 }
 
 def api [req: record, cfg: record] {
