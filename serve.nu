@@ -13,9 +13,7 @@ const CFG = "/home/app/admin/tenant.json"
 const BROKER_PUB = "/home/app/admin/broker-pub.jwk"
 const AUTH_DIR = "/home/app/admin/auth"
 const STEP = "/usr/local/bin/step"
-const REGISTRY = "/home/app/admin/registry.nuon"
 const SITES = "/home/app/sites"
-const GIT_ROOT = "/home/app/git"
 const TOKENS = "/home/app/git/tokens.json"
 # Push keys live in git-host's store, not here. We reach it over the socket http-nu puts in
 # the store directory. That directory is inside /home/app/git (0750 app:app), so no site can
@@ -24,11 +22,6 @@ const TOKENS = "/home/app/git/tokens.json"
 # shared secret between the admin and git-host, and nothing to rotate or leak.
 const STORE_SOCK = "/home/app/git/store/sock"
 const KEY_TOPIC = "site.token"
-# Canonical location of the deploy hooks -- every bare repo's `core.hooksPath` points here, so
-# editing a hook takes effect on the next push everywhere. Single point of truth: when the layer
-# moves the checkout, this is the only line that changes. (ce-boot-config symlinks this path at
-# the merged layout /home/app/admin/git-host.)
-const HOOKS_DIR = "/home/app/git-host"
 const ASSETS = "/home/app/admin/assets"
 const TPL = "/home/app/admin/templates"
 const SHOTS = "/home/app/admin/screenshots"
@@ -39,6 +32,7 @@ const LOG_TAIL = 200
 const LOG_CAP = 500
 const LOG_WINDOW = 900
 use /home/app/admin/oauth/lib.nu *
+use /home/app/admin/git-host/site.nu *
 use http-nu/html *
 use http-nu/datastar *
 
@@ -48,7 +42,6 @@ def verify-token [token: string, cfg: record] {
 }
 
 def load-cfg [] { if ($CFG | path exists) { open --raw $CFG | from json } else { null } }
-def load-registry [] { if ($REGISTRY | path exists) { open $REGISTRY } else { [] } }
 def load-tokens [] { if ($TOKENS | path exists) { open --raw $TOKENS | from json } else { {} } }
 
 # --- push keys, over git-host's store socket -------------------------------------------
@@ -80,21 +73,23 @@ def store-remove [id: string] {
 }
 
 def key-scope [meta: record] {
-  if ($meta.every? | default false) { {every: true, sites: []} } else {
+  let manage = ($meta.manage? | default false)
+  if ($meta.every? | default false) { {every: true, sites: [], manage: $manage} } else {
     let legacy = (if ($meta.label? | is-empty) { [] } else { [$meta.label] })
-    {every: false, sites: ($meta.sites? | default $legacy | sort)}
+    {every: false, sites: ($meta.sites? | default $legacy | sort), manage: $manage}
   }
 }
 
 # Where a key pushes, in a few words: the table cell on /keys.
 def reach [k: record] {
-  if $k.every { "every site" } else {
+  let sites = (if $k.every { "every site" } else {
     match ($k.sites | length) {
       0 => "no site yet"
       1 => ($k.sites | first)
       $n => $"($n) sites"
     }
-  }
+  })
+  if $k.manage { $"($sites), makes sites" } else { $sites }
 }
 
 # Every key, newest first. The id is the frame id, which is what a page and a delete name.
@@ -118,7 +113,7 @@ def keys-for [label: string] { all-keys | where {|k| $k.every or ($label in $k.s
 def mint-key [name: string, every: bool, sites: list] {
   let secret = (random chars --length 32)
   let r = (store-append $KEY_TOPIC {
-    name: $name, every: $every, sites: $sites
+    name: $name, every: $every, sites: $sites, manage: false
     hash: ($secret | hash sha256)
     suffix: ($secret | str substring (-6..))
     created: (date now | format date "%Y-%m-%d")
@@ -130,10 +125,10 @@ def mint-key [name: string, every: bool, sites: list] {
 # Change where a key pushes. Frames don't change, so this appends the key again with its new
 # sites, then removes the old frame. In between, both frames hold the same hash and the key
 # reaches the sites of either, never a site neither names. Returns the new frame's id, or null.
-def rescope-key [id: string, every: bool, sites: list] {
+def rescope-key [id: string, every: bool, sites: list, manage: bool] {
   let old = (store-cat $KEY_TOPIC | where id == $id | get -o 0)
   if ($old | is-empty) { null } else {
-    let meta = ($old.meta | reject -o label | merge {every: $every, sites: $sites})
+    let meta = ($old.meta | reject -o label | merge {every: $every, sites: $sites, manage: $manage})
     let r = (store-append $KEY_TOPIC $meta)
     let new = (try { $r.stdout | from json | get id } catch { null })
     if ($r.exit_code != 0) or ($new | is-empty) { null } else {
@@ -177,10 +172,6 @@ def form-pairs [body: string] {
 
 def valid-key-id [id: string] { $id =~ '^[0-9a-z]{25,32}$' }
 def valid-key-name [name: string] { $name =~ '^[\w][\w .-]{0,31}$' }
-
-def valid-label [label: string] {
-  ($label =~ '^[a-z0-9][a-z0-9-]{0,31}$') and ($label not-in ["admin" "www" "placeholder" "git"])
-}
 
 # The VM's own units, reachable as labels. They are not sites -- no push token, no repo, nothing
 # to deploy -- but they run and they log, and being unable to read the admin's own log while
@@ -396,29 +387,15 @@ def screenshots-page [user: string, cfg: record] {
 # key shown. Rendered, not redirected: a redirect would have to carry the secret in a URL, and
 # a URL is the one place a credential must never be -- browser history, the referer header,
 # and the access log all keep it.
-def do-create [label: string, reg: list, cfg: record, user: string] {
-  let bare = $"($GIT_ROOT)/($label).git"
-  if ($label in ($reg | get -o label | default [])) {
-    resp $"label ($label) already in use, pick another" 409 {}
-  } else if ($bare | path exists) {
-    resp $"($bare) already exists on disk" 409 {}
-  } else {
-    let init = (^git init --bare -b main $bare | complete)
-    if $init.exit_code != 0 {
-      resp $"git init failed: ($init.stderr)" 500 {}
+def do-create [label: string, cfg: record, user: string] {
+  let failed = (create-site $label $user)
+  if ($failed | is-not-empty) { resp $failed.error $failed.status {} } else {
+    ^chown -R app:app $"($GIT_ROOT)/($label).git"
+    let minted = (mint-key "initial" false [$label])
+    if ($minted | is-empty) {
+      resp $"site ($label) created, but the key store did not answer -- add a key on /keys" 500 {}
     } else {
-      ^git -C $bare config http.receivepack true
-      ^git -C $bare config http.uploadpack true
-      # one canonical copy of the hooks serves every repo -- no per-repo snapshot to go stale
-      ^git -C $bare config core.hooksPath $HOOKS_DIR
-      ^chown -R app:app $bare
-      $reg | append {label: $label, created: (date now | format date "%Y-%m-%d")} | save --force $REGISTRY
-      let minted = (mint-key "initial" false [$label])
-      if ($minted | is-empty) {
-        resp $"site ($label) created, but the key store did not answer -- add a key on /keys" 500 {}
-      } else {
-        site-page $label $user $cfg "detail" $minted.secret
-      }
+      site-page $label $user $cfg "detail" $minted.secret
     }
   }
 }
@@ -790,7 +767,7 @@ def do-restart [label: string] {
           "/create" => {
             if ($sess | is-empty) { resp "unauthorized" 401 {} } else if ($req.method != "POST") { resp "method not allowed" 405 {} } else {
               let label = ((parse-form $body).label? | default "" | str trim)
-              if not (valid-label $label) { resp "invalid label, use a-z 0-9 - (<=32), not a reserved name" 400 {} } else { do-create $label (load-registry) $cfg (who-of $sess) }
+              do-create $label $cfg (who-of $sess)
             }
           }
           "/keys" => {
@@ -818,10 +795,11 @@ def do-restart [label: string] {
               let f = (form-pairs $body)
               let id = ($f | where k == "id" | get -o 0.v | default "")
               let every = (($f | where k == "scope" | get -o 0.v | default "") == "every")
+              let manage = ($f | any {|p| $p.k == "manage" })
               let labels = (load-registry | get -o label | default [])
               let sites = ($f | where k == "site" | get v | where {|l| $l in $labels } | uniq | sort)
               if not (valid-key-id $id) { resp "invalid key id" 400 {} } else {
-                let new = (rescope-key $id $every (if $every { [] } else { $sites }))
+                let new = (rescope-key $id $every (if $every { [] } else { $sites }) $manage)
                 if ($new | is-empty) { resp "no such key, or the key store did not answer" 404 {} } else {
                   resp "" 302 {Location: $"/k/($new)"}
                 }

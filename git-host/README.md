@@ -25,6 +25,12 @@ password) is looked up by its hash in the store, and the key names the sites it 
 or every site. A key from before keys could reach more than one site names one `label`, and
 pushes to that site alone.
 
+A key with `manage` set makes a site when it pushes to one that doesn't exist yet. The push's
+first request, `GET <label>.git/info/refs?service=git-receive-pack`, finds no repo, so the
+gateway makes it through `site.nu`, the same code the admin's "Create site" runs, then adds
+the label to the key's sites and carries on with the push. A fetch never makes a site, and
+a key without `manage` still gets `no such repo`.
+
 Each bare repo carries two hooks, installed by cross-stream-admin's "create site":
 
 - `pre-receive` validates an optional `cross-stream.nuon` in the pushed tree and rejects a

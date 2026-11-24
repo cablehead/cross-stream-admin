@@ -20,7 +20,9 @@ git-push path it offers tenants.
 - **Keys** (`/keys`). Keys belong to the account. A key lets git push to its sites, and lets
   a script list them and read their logs through `/api/sites`. It reaches every site,
   including sites made after it, or the sites ticked on its page (`/k/<id>`). A site's page
-  lists the keys that reach it.
+  lists the keys that reach it. A key ticked "Makes a site" also makes a site by pushing to one
+  that doesn't exist yet: git-host creates it the way "Create site" does, and adds it to the
+  key's sites. Only the login can tick it.
 - **Push to deploy.** The tenant pushes to `git.<tenant>.cross.stream/<label>.git`. The
   [git-host](git-host/) gateway checks the tree out
   into `/home/app/sites/<label>/repo` and restarts `site@<label>`. Each push redeploys.

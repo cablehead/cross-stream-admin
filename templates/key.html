@@ -21,6 +21,9 @@ pick its sites below.</small></p>
     <label><input type=radio name=scope value=every{% if key.every %} checked{% endif %}> Every site, including ones you make later</label>
     <label><input type=radio name=scope value=some{% if not key.every %} checked{% endif %}> Only the sites ticked below</label>
   </fieldset>
+  <fieldset>
+    <label><input type=checkbox name=manage value=yes{% if key.manage %} checked{% endif %}> Makes a site by pushing to one that doesn't exist yet</label>
+  </fieldset>
 
   <h2>Sites ({{ key.sites | length }})</h2>
   {% if key.sites %}
