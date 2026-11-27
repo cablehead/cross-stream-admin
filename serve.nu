@@ -615,6 +615,7 @@ def logs-stream [label: string] {
 #   curl -u "$KEY:" https://admin.<tenant>.cross.stream/api/sites
 #   curl -u "$KEY:" "https://admin.<tenant>.cross.stream/api/sites/<site>/logs?n=200"
 #   curl -u "$KEY:" "https://admin.<tenant>.cross.stream/api/sites/<site>/logs?follow=1"
+#   curl https://admin.<tenant>.cross.stream/api/changes   (what's new; no key needed)
 # A key sees only its own sites: every site, or the ones it lists. The check is git-host's: the
 # secret, as the Basic username or password, hashed and looked up on `site.token`.
 
@@ -671,7 +672,25 @@ def api-logs [label: string, n: int, follow: bool] {
     | metadata set { merge $ndjson }
 }
 
+# What's new for sites, docs/changes.md as JSON, newest first: one {date, title, text} per
+# `## <date>: <title>` heading, the text its Markdown. Public, so any agent can read it.
+def api-changes [] {
+  let src = $"($DOCS)/changes.md"
+  if not ($src | path exists) { return (resp "changes not found\n" 404 {}) }
+  open --raw $src | decode utf-8
+    | split row "\n## " | skip 1
+    | each {|sec|
+      let head = ($sec | lines | first | parse --regex '^(?<date>\d{4}-\d{2}-\d{2}): (?<title>.+)$')
+      if ($head | is-empty) { null } else {
+        {date: $head.0.date, title: $head.0.title, text: ($sec | lines | skip 1 | str join "\n" | str trim)}
+      }
+    }
+    | where {|c| $c != null }
+    | to json -r | metadata set { merge {'http.response': {headers: {"content-type": "application/json"}}} }
+}
+
 def api [req: record, cfg: record] {
+  if $req.path in ["/api/changes" "/api/changes/"] { return (api-changes) }
   let scopes = (key-scopes $req)
   if ($scopes | is-empty) {
     return (resp "a key is needed, as with git: curl -u \"$KEY:\" ...\n" 401 {"WWW-Authenticate": 'Basic realm="api"'})

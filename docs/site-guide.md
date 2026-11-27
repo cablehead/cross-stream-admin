@@ -2,6 +2,9 @@
 
 Everything a site needs to know, in one place. Rendered in the admin at `/docs`.
 
+What's new is at `/api/changes`, as JSON, newest first, for an agent to read: each change has its
+`date`, a `title` and its `text`.
+
 ## The contract
 
 A site is a git repo with a **`serve.nu`** at its root, an
